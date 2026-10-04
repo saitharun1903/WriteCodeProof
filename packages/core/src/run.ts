@@ -1,14 +1,23 @@
 import { randomUUID } from 'node:crypto';
-import { behaviourDiffCheck, planBehaviourDiff } from './checks/behaviourDiff.js';
+import {
+  behaviourDiffCheck,
+  planBehaviourDiff,
+  type BehaviourPlan,
+} from './checks/behaviourDiff.js';
 import { existingTestsCheck } from './checks/existingTests.js';
-import { draftGeneratedTests, generatedTestsCheck } from './checks/generatedTests.js';
+import {
+  draftGeneratedTests,
+  generatedTestsCheck,
+  type DraftedTests,
+} from './checks/generatedTests.js';
 import { securityCheck } from './checks/security.js';
+import { DEFAULT_REPO_CONFIG, type RepoConfig } from './config/repoConfig.js';
 import { collectChanges, type CollectOptions } from './diff/collect.js';
 import type { LlmProvider } from './llm/types.js';
 import { RunBudget } from './sandbox/budget.js';
 import type { Sandbox } from './sandbox/runner.js';
 import type { ChangeSet, CheckName, CheckResult } from './types.js';
-import { prepareWorkspace } from './workspace/context.js';
+import { prepareWorkspace, type RunContext } from './workspace/context.js';
 
 export interface ProofOptions extends CollectOptions {
   sandbox: Sandbox;
@@ -17,6 +26,8 @@ export interface ProofOptions extends CollectOptions {
   /** Skip generated tests even when an LLM is available (CLI --no-generate). */
   generateTests?: boolean;
   maxGeneratedFunctions?: number;
+  /** The target repo's `.writecode/proof.yml` (defaults when omitted). */
+  config?: RepoConfig;
   runId?: string;
   onProgress?: (message: string) => void;
 }
@@ -47,8 +58,19 @@ export async function runProof(options: ProofOptions): Promise<ProofRun> {
   const progress = options.onProgress ?? (() => undefined);
   const { sandbox, llm } = options;
 
+  const config = options.config ?? DEFAULT_REPO_CONFIG;
+
   progress('Reading the diff');
-  const changes = await collectChanges(options);
+  const changes = await collectChanges({
+    ...options,
+    ignore: [...(options.ignore ?? []), ...config.ignore],
+  });
+  if (config.languages) {
+    const allowed = new Set(config.languages);
+    changes.changedFunctions = changes.changedFunctions.filter((f) =>
+      allowed.has(f.language === 'tsx' ? 'typescript' : f.language),
+    );
+  }
   const done = (checks: CheckResult[], notes: string[] = []): ProofRun => ({
     runId,
     changes,
@@ -69,22 +91,39 @@ export async function runProof(options: ProofOptions): Promise<ProofRun> {
 
   await sandbox.ping();
   const budget = new RunBudget(sandbox.settings.runBudgetMs);
-  const ctx = await prepareWorkspace(changes, { sandbox, budget, runId, onProgress: progress });
-  try {
-    const generate = options.generateTests !== false && llm !== null;
-    const testOptions = { llm, maxFunctions: options.maxGeneratedFunctions };
-    // The model works while the sandbox runs the other checks. Both promises
-    // resolve (never reject): failures become notes on their checks.
+  const generate = options.generateTests !== false && llm !== null;
+  const testOptions = {
+    llm,
+    maxFunctions: options.maxGeneratedFunctions ?? config.maxGeneratedFunctions,
+  };
+  // The model starts as soon as the code is on disk and works while
+  // dependencies install and the sandbox runs the other checks.
+  let plan: Promise<BehaviourPlan> | undefined;
+  let drafted: Promise<DraftedTests> | undefined;
+  const startModel = (ctx: RunContext) => {
     if (llm) progress('Asking the model for inputs and tests (in the background)');
-    const plan = planBehaviourDiff(ctx, { llm });
-    const drafted = plan.then(() =>
+    plan = planBehaviourDiff(ctx, { llm });
+    drafted = plan.then(() =>
       generate ? draftGeneratedTests(ctx, testOptions) : { drafts: [], notes: [] },
     );
+    // Handled where they are awaited; this keeps an early failure from going unhandled.
     plan.catch(() => undefined);
     drafted.catch(() => undefined);
+  };
 
+  const ctx = await prepareWorkspace(changes, {
+    sandbox,
+    budget,
+    runId,
+    onProgress: progress,
+    onCheckedOut: startModel,
+  });
+  try {
     progress('Running existing tests');
-    const existing = await existingTestsCheck(ctx);
+    const existing = await existingTestsCheck(ctx, {
+      command: config.testCommand,
+      timeoutMs: config.testTimeBudgetS ? config.testTimeBudgetS * 1000 : null,
+    });
     progress('Scanning for security issues');
     const security = await securityCheck(ctx);
     progress('Comparing behaviour of changed functions');

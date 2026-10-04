@@ -12,8 +12,8 @@ The full spec is in [WRITECODE_PROOF_SPEC.md](WRITECODE_PROOF_SPEC.md).
 | 2     | Diff + changed-function detection        | Done    |
 | 3     | Docker sandbox runner                    | Done    |
 | 4     | Checks (tests, security, behaviour, gen) | Done    |
-| 5     | Risk score + CLI                         | Next    |
-| 6     | GitHub App                               | Pending |
+| 5     | Risk score + CLI                         | Done    |
+| 6     | GitHub App                               | Next    |
 | 7     | Dashboard                                | Pending |
 | 8     | Hardening                                | Pending |
 
@@ -42,20 +42,19 @@ This starts Postgres on `127.0.0.1:5433` and Redis on `127.0.0.1:6380`, then wai
 
 ## Commands
 
-| Command                   | Does                                             |
-| ------------------------- | ------------------------------------------------ |
-| `npm test`                | Run all tests (no build needed)                  |
-| `npm run build`           | Compile every package to `dist/`                 |
-| `npm run lint`            | ESLint                                           |
-| `npm run format`          | Prettier                                         |
-| `npm run infra:up`        | Start Postgres + Redis                           |
-| `npm run infra:down`      | Stop them (data stays in the volumes)            |
-| `npm run infra:logs`      | Follow their logs                                |
-| `npm run examples`        | Build the sample repos in `.examples/`           |
-| `npm run build:images`    | Build the three sandbox images                   |
-| `npm run test:sandbox`    | Docker tests proving the sandbox limits          |
-| `npm run proof -- <repo>` | Run all checks on a repo (until the CLI lands)   |
-| `npm run cache:clear`     | Remove cached dependency volumes and LLM replies |
+| Command                | Does                                             |
+| ---------------------- | ------------------------------------------------ |
+| `npm test`             | Run all tests (no build needed)                  |
+| `npm run build`        | Compile every package to `dist/`                 |
+| `npm run lint`         | ESLint                                           |
+| `npm run format`       | Prettier                                         |
+| `npm run infra:up`     | Start Postgres + Redis                           |
+| `npm run infra:down`   | Stop them (data stays in the volumes)            |
+| `npm run infra:logs`   | Follow their logs                                |
+| `npm run examples`     | Build the sample repos in `.examples/`           |
+| `npm run build:images` | Build the three sandbox images                   |
+| `npm run test:sandbox` | Docker tests proving the sandbox limits          |
+| `npm run cache:clear`  | Remove cached dependency volumes and LLM replies |
 
 ## Layout
 
@@ -125,6 +124,74 @@ Images, from `sandbox-images/`:
 | `tools`  | semgrep 1.179.0          | gitleaks 8.30.1, Semgrep `p/default` rules | ~1.6 GB |
 
 Scans run offline, so the Semgrep community rules (about 1,000) are downloaded when the tools image is built. Rebuild it to pick up newer rules.
+
+## Using the CLI
+
+```bash
+npx writecode-proof doctor
+```
+
+Checks Node, git, your settings, Docker, the three sandbox images and the LLM, and says what to fix.
+
+```bash
+npx writecode-proof check path/to/repo
+```
+
+Compares the working tree (including uncommitted and new files) with `main` and prints the Proof Pack.
+
+| Option              | Does                                                           |
+| ------------------- | -------------------------------------------------------------- |
+| `--base <ref>`      | Compare against another branch, tag or commit                  |
+| `--head <ref>`      | Check a branch or commit instead of the working tree           |
+| `--json`            | Machine-readable report on stdout (progress stays on stderr)   |
+| `--out <file.md>`   | Also write the report as Markdown, in the PR comment format    |
+| `--no-generate`     | Skip generated tests                                           |
+| `--no-llm`          | Use no model at all: edge-case inputs only, no generated tests |
+| `--provider <name>` | `ollama`, `openai-compatible` or `anthropic` for this run      |
+| `--ai-authored`     | The change was written by an AI; adds to the score             |
+| `-q, --quiet`       | No progress output                                             |
+
+Exit codes: `0` Low or Medium, `1` High, `2` Blocked, `3` the tool itself failed.
+
+### Risk score
+
+0–10, from [weights.ts](packages/core/src/score/weights.ts):
+
+| Signal                                                  | Points                                    |
+| ------------------------------------------------------- | ----------------------------------------- |
+| Existing test now failing                               | 3 each, up to 6                           |
+| Behaviour change                                        | 3 per function, up to 6                   |
+| Generated test failing (confirmed against the old code) | 1.5 each, up to 4.5                       |
+| Security finding                                        | low 0.5, medium 1.5, high 3               |
+| Diff size                                               | 0 at 50 changed lines, rising to 1 at 400 |
+| Changed files no test imports                           | up to 1.5, by share                       |
+| AI-authored                                             | 1                                         |
+
+A leaked secret or critical finding blocks the change whatever the score. Under 3 is Low (auto-approve allowed), 3 to under 7 Medium (one reviewer), 7 and up High (code owner). Each report ends with the reason, e.g. `Why 6: 2 unexplained behaviour changes (+6)`.
+
+### Repo settings
+
+A repository can add `.writecode/proof.yml`:
+
+```yaml
+version: 1
+mode: advise # advise | enforce
+languages: [typescript, javascript, python]
+tests:
+  command: '' # e.g. "npm test"; empty = detect vitest, jest or pytest
+  time_budget_seconds: 480
+ignore: ['docs/**', '**/*.md']
+generated_tests:
+  max_functions: 10
+policies:
+  auto_approve_below: 3
+  one_reviewer: [3, 6]
+  code_owner_above: 7
+  block_on: [critical_security, secret_leak]
+  ai_authored_weight: 1.0
+```
+
+Every key is optional except `version`. Unknown keys and bad values are reported and the defaults are used. With `tests.command` set, the command runs on both versions and "passed before, fails now" is flagged.
 
 ## Checks
 
@@ -232,5 +299,23 @@ npm run examples
 ```
 
 ```bash
-npm run proof -- .examples/js-sample
+npx writecode-proof check .examples/js-sample
 ```
+
+## Verifying Phase 5
+
+```bash
+npx writecode-proof doctor
+```
+
+```bash
+npm run examples
+```
+
+```bash
+npx writecode-proof check .examples/js-sample
+```
+
+The samples live in `examples/<name>` as `base/` and `pr/` folders; `npm run examples` turns them into git repos under `.examples/`, which is what `check` needs. With Ollama and `qwen2.5-coder:7b` on a 4 GB laptop GPU a first run takes about 2.5 minutes and prints Risk 10/10 High (exit code 1), with the crash and the rounding change listed under Why.
+
+[cli.docker.test.ts](tests/sandbox/cli.docker.test.ts) runs the built command against real repos: JSON and Markdown output, every exit code (Medium 0, High 1, Blocked 2, tool error 3), `--ai-authored`, the repo config and `doctor`.

@@ -189,6 +189,11 @@ export interface PrepareOptions {
   runId?: string;
   /** Called with short progress messages. */
   onProgress?: (message: string) => void;
+  /**
+   * Called once base and head are on disk, before dependencies install.
+   * Lets slow work that only reads files (the LLM) start early.
+   */
+  onCheckedOut?: (ctx: RunContext) => void;
 }
 
 /** Export base and head into a fresh run folder and install their dependencies. */
@@ -219,6 +224,7 @@ export async function prepareWorkspace(
       head: await detectProjects(join(workdir, 'head'), wantPython),
     };
     const ctx = new RunContext(runId, changes, sandbox, budget, workdir, projects);
+    options.onCheckedOut?.(ctx);
 
     for (const side of ['head', 'base'] as const) {
       if (!existsSync(ctx.hostPath(side))) continue;

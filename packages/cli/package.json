@@ -16,5 +16,8 @@
     "@writecode-proof/core": "0.1.0",
     "commander": "^15.0.0",
     "picocolors": "^1.1.1"
+  },
+  "engines": {
+    "node": ">=20.12"
   }
 }

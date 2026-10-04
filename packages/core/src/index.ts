@@ -19,7 +19,7 @@ export { changedFunctions } from './diff/changedFunctions.js';
 export type { FileVersions } from './diff/changedFunctions.js';
 export { collectChanges } from './diff/collect.js';
 export type { CollectOptions } from './diff/collect.js';
-export { GitError } from './diff/git.js';
+export { GitError, repoRoot } from './diff/git.js';
 export { parseUnifiedDiff, unquoteGitPath } from './diff/unifiedDiff.js';
 export { extractFunctions } from './parse/functions.js';
 export type { ExtractResult } from './parse/functions.js';
@@ -85,3 +85,34 @@ export type { ProofOptions, ProofRun } from './run.js';
 export { applyWorkingTree, exportCommit } from './workspace/checkout.js';
 export { prepareWorkspace, RunContext } from './workspace/context.js';
 export { detectProjects } from './workspace/project.js';
+export {
+  DEFAULT_REPO_CONFIG,
+  loadRepoConfig,
+  parseRepoConfig,
+  REPO_CONFIG_PATH,
+} from './config/repoConfig.js';
+export type { LoadedRepoConfig, RepoConfig } from './config/repoConfig.js';
+export type { ExistingTestsOptions } from './checks/existingTests.js';
+export {
+  BAND_ACTION,
+  BAND_LABEL,
+  bandFor,
+  formatScore,
+  riskInputFromRun,
+  scoreRisk,
+} from './score/score.js';
+export type { Contribution, Risk, RiskBand, RiskInput } from './score/score.js';
+export { DEFAULT_POLICY, MAX_SCORE, WEIGHTS } from './score/weights.js';
+export type { BlockReason, Policy } from './score/weights.js';
+export {
+  CHECK_LABEL,
+  CHECK_ORDER,
+  changeSummary,
+  formatDuration,
+  orderedChecks,
+  shortId,
+  STATUS_ICON,
+} from './report/common.js';
+export type { Report } from './report/common.js';
+export { COMMENT_MARKER, escapeMarkdown, renderMarkdown } from './report/markdown.js';
+export { JSON_REPORT_VERSION, toJsonReport } from './report/json.js';

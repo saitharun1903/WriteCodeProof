@@ -53,7 +53,19 @@ function command(ctx: RunContext, suite: Suite, side: Side, report: string): str
   }
 }
 
-async function runSuite(ctx: RunContext, suite: Suite, side: Side): Promise<SuiteRun> {
+export interface ExistingTestsOptions {
+  /** `tests.command` from the repo config: replaces runner detection. */
+  command?: string | null;
+  /** `tests.time_budget_seconds`: limit for each side's test run. */
+  timeoutMs?: number | null;
+}
+
+async function runSuite(
+  ctx: RunContext,
+  suite: Suite,
+  side: Side,
+  timeoutMs?: number,
+): Promise<SuiteRun> {
   const files = suite.files.filter((f) => existsSync(ctx.hostPath(side, f)));
   if (files.length === 0) return { cases: [], error: null };
   const report = `existing-${suite.runner}-${side}.${suite.runner === 'jest' ? 'json' : 'xml'}`;
@@ -63,6 +75,7 @@ async function runSuite(ctx: RunContext, suite: Suite, side: Side): Promise<Suit
     side,
     suite.toolchain,
     command(ctx, { ...suite, files }, side, report),
+    { timeoutMs },
   );
   const raw = await readOptional(ctx.hostPath(SCRATCH, report));
   if (!raw) return { cases: [], error: stepFailure(result) };
@@ -75,13 +88,57 @@ async function runSuite(ctx: RunContext, suite: Suite, side: Side): Promise<Suit
   }
 }
 
+/** The repo's own test command: compare its exit status on base and head. */
+async function runCommand(
+  ctx: RunContext,
+  command: string,
+  timeoutMs: number | undefined,
+  result: CheckResult,
+): Promise<void> {
+  const toolchain = ctx.projects.head.node ? 'node' : 'python';
+  const head = await ctx.step('head', toolchain, ['sh', '-c', command], { timeoutMs });
+  const base = await ctx.step('base', toolchain, ['sh', '-c', command], { timeoutMs });
+  const passedNow = head.exitCode === 0;
+  const passedBefore = base.exitCode === 0;
+  result.stats = { run: 1, passed: passedNow ? 1 : 0, newlyFailing: 0, failedBefore: 0 };
+  if (passedNow) {
+    result.summary = `${command} passes`;
+  } else if (passedBefore) {
+    result.status = 'failed';
+    result.stats.newlyFailing = 1;
+    result.summary = `${command} now fails`;
+    result.findings.push({
+      check: 'existing_tests',
+      severity: 'high',
+      title: `Test command now fails: ${command}`,
+      file: null,
+      line: null,
+      function: null,
+      detail: { command, output: stepFailure(head) },
+    });
+  } else {
+    result.stats.failedBefore = 1;
+    result.summary = `${command} fails on both versions`;
+    result.notes.push(`Already failing before the change: ${stepFailure(base)}`);
+  }
+}
+
 /** Spec 5a: run tests related to the change on base and head; flag pass → fail. */
-export function existingTestsCheck(ctx: RunContext): Promise<CheckResult> {
+export function existingTestsCheck(
+  ctx: RunContext,
+  options: ExistingTestsOptions = {},
+): Promise<CheckResult> {
   return runCheck('existing_tests', async (result) => {
     const head = ctx.projects.head;
     const allFiles = await listFiles(ctx.hostPath('head'));
     const changed = changedSourceFiles(ctx);
     const changedSet = new Set(changed);
+    const timeoutMs = options.timeoutMs ?? undefined;
+    if (options.command) {
+      await runCommand(ctx, options.command, timeoutMs, result);
+      result.stats.untestedFiles = 0;
+      return;
+    }
 
     const suites: Suite[] = [];
     if (head.node) {
@@ -131,8 +188,8 @@ export function existingTestsCheck(ctx: RunContext): Promise<CheckResult> {
     const findings: Finding[] = [];
 
     for (const suite of suites) {
-      const headRun = await runSuite(ctx, suite, 'head');
-      const baseRun = await runSuite(ctx, suite, 'base');
+      const headRun = await runSuite(ctx, suite, 'head', timeoutMs);
+      const baseRun = await runSuite(ctx, suite, 'base', timeoutMs);
       if (headRun.error) result.notes.push(`${suite.runner} on head: ${headRun.error}`);
       if (baseRun.error) result.notes.push(`${suite.runner} on base: ${baseRun.error}`);
 

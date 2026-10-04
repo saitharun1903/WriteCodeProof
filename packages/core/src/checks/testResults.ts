@@ -34,6 +34,8 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '',
   textNodeName: '#text',
+  // Decode &#10; and friends: failure messages carry newlines as numeric entities.
+  htmlEntities: true,
   isArray: (name) => ['testsuite', 'testcase', 'failure', 'error', 'skipped'].includes(name),
 });
 

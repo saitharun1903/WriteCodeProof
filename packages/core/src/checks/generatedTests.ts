@@ -161,7 +161,11 @@ async function generate(ctx: RunContext, llm: LlmProvider, target: Target): Prom
     moduleImports: await moduleImports(ctx, fn),
     source: await sourceWithContext(ctx, fn),
   });
-  const reply = await llm.complete({ system, prompt });
+  const reply = await llm.complete({
+    system,
+    prompt,
+    maxTokens: CHECK_DEFAULTS.GENERATED_TEST_MAX_TOKENS,
+  });
   const code = sanitizeTestCode(extractCode(reply), target);
   const hasTests =
     fn.language === 'python' ? /^\s*def test_/m.test(code) : /\btest\s*\(/.test(code);

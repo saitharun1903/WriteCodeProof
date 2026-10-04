@@ -89,6 +89,8 @@ export const CHECK_DEFAULTS = {
   BEHAVIOUR_MAX_INPUTS: 30,
   /** A single function call longer than this counts as hanging. */
   CALL_TIMEOUT_MS: 2000,
+  /** Most tokens the model may write for one test file (keeps slow local models in check). */
+  GENERATED_TEST_MAX_TOKENS: 900,
   /** Single generated or existing test longer than this is stopped. */
   TEST_TIMEOUT_MS: 10_000,
   /** Clock and seed used so both sides see the same "random" values and time. */
