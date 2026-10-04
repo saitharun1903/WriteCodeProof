@@ -1,0 +1,10 @@
+[project]
+name = "py-sample"
+version = "1.0.0"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

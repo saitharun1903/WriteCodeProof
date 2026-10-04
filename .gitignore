@@ -7,3 +7,4 @@ coverage/
 !.env.example
 *.pem
 .DS_Store
+.examples/
