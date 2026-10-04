@@ -21,10 +21,13 @@
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f",
-    "examples": "node scripts/example-repo.mjs js-sample && node scripts/example-repo.mjs py-sample"
+    "examples": "node scripts/example-repo.mjs js-sample && node scripts/example-repo.mjs py-sample",
+    "build:images": "npm run build && node scripts/build-images.mjs",
+    "test:sandbox": "vitest run --config vitest.sandbox.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/dockerode": "^4.0.1",
     "@types/node": "^26.6.4",
     "@types/picomatch": "^4.0.3",
     "eslint": "^10.12.0",

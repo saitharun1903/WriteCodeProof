@@ -12,6 +12,8 @@ export default defineConfig({
   },
   test: {
     include: ['packages/*/test/**/*.test.ts', 'tests/**/*.test.ts'],
+    // Needs Docker; run separately with npm run test:sandbox.
+    exclude: ['**/node_modules/**', 'tests/sandbox/**'],
     environment: 'node',
   },
 });

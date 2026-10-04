@@ -15,6 +15,23 @@ const positiveInt = (fallback: number) =>
 const positiveNumber = (fallback: number) =>
   z.preprocess(blankToUndefined, z.coerce.number().positive().default(fallback));
 
+const dockerSize = (fallback: string) =>
+  z.preprocess(
+    blankToUndefined,
+    z
+      .string()
+      .regex(/^\d+[kmg]$/i, 'use a Docker size like 512m or 2g')
+      .default(fallback),
+  );
+const imageName = (fallback: string) =>
+  z.preprocess(
+    blankToUndefined,
+    z
+      .string()
+      .regex(/^\w[\w./:@-]*$/, 'not a valid image reference')
+      .default(fallback),
+  );
+
 export const envSchema = z
   .object({
     // GitHub App
@@ -45,14 +62,27 @@ export const envSchema = z
 
     // Sandbox
     SANDBOX_CPUS: positiveNumber(DEFAULTS.SANDBOX_CPUS),
-    SANDBOX_MEMORY: z.preprocess(
+    SANDBOX_MEMORY: dockerSize(DEFAULTS.SANDBOX_MEMORY),
+    SANDBOX_PIDS_LIMIT: positiveInt(DEFAULTS.SANDBOX_PIDS_LIMIT),
+    SANDBOX_TMPFS_SIZE: dockerSize(DEFAULTS.SANDBOX_TMPFS_SIZE),
+    SANDBOX_USER: z.preprocess(
       blankToUndefined,
       z
         .string()
-        .regex(/^\d+[kmg]$/i, 'use a Docker size like 512m or 2g')
-        .default(DEFAULTS.SANDBOX_MEMORY),
+        .regex(/^\d+:\d+$/, 'use numeric uid:gid, e.g. 1000:1000')
+        .refine(
+          (v) => !v.split(':').some((id) => Number(id) === 0),
+          'sandboxes must not run as root',
+        )
+        .default(DEFAULTS.SANDBOX_USER),
     ),
     SANDBOX_STEP_TIMEOUT_S: positiveInt(DEFAULTS.SANDBOX_STEP_TIMEOUT_S),
+    SANDBOX_MAX_OUTPUT_BYTES: positiveInt(DEFAULTS.SANDBOX_MAX_OUTPUT_BYTES),
+    // Where per-run temp folders are created. Blank = the OS temp folder.
+    SANDBOX_WORKDIR_ROOT: optionalString,
+    SANDBOX_IMAGE_NODE: imageName(DEFAULTS.SANDBOX_IMAGE_NODE),
+    SANDBOX_IMAGE_PYTHON: imageName(DEFAULTS.SANDBOX_IMAGE_PYTHON),
+    SANDBOX_IMAGE_TOOLS: imageName(DEFAULTS.SANDBOX_IMAGE_TOOLS),
     RUN_BUDGET_S: positiveInt(DEFAULTS.RUN_BUDGET_S),
     MAX_CONCURRENT_RUNS: positiveInt(DEFAULTS.MAX_CONCURRENT_RUNS),
   })

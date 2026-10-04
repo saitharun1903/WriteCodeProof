@@ -20,3 +20,19 @@ export type { ExtractResult } from './parse/functions.js';
 export { detectLanguage } from './parse/languages.js';
 export type * from './types.js';
 export { readPackageVersion } from './version.js';
+export { RunBudget } from './sandbox/budget.js';
+export { BudgetExceededError, SandboxError } from './sandbox/errors.js';
+export { Sandbox } from './sandbox/runner.js';
+export type { StepOptions, StepResult } from './sandbox/runner.js';
+export { imageForLanguage, parseDockerSize, sandboxSettingsFromEnv } from './sandbox/settings.js';
+export type { SandboxSettings } from './sandbox/settings.js';
+export {
+  buildContainerSpec,
+  RUN_LABEL,
+  SANDBOX_LABEL,
+  TMP_DIR,
+  VOLUME_PREFIX,
+  WORK_DIR,
+} from './sandbox/spec.js';
+export type { StepSpec, VolumeMount } from './sandbox/spec.js';
+export { assertInsideRoot, createWorkdir, removeWorkdir } from './sandbox/workdir.js';

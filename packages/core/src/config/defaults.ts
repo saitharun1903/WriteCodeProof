@@ -14,7 +14,14 @@ export const DEFAULTS = {
 
   SANDBOX_CPUS: 1,
   SANDBOX_MEMORY: '2g',
+  SANDBOX_PIDS_LIMIT: 256,
+  SANDBOX_TMPFS_SIZE: '512m',
+  SANDBOX_USER: '1000:1000',
   SANDBOX_STEP_TIMEOUT_S: 120,
+  SANDBOX_MAX_OUTPUT_BYTES: 1024 * 1024,
+  SANDBOX_IMAGE_NODE: 'writecode-proof/sandbox-node:1',
+  SANDBOX_IMAGE_PYTHON: 'writecode-proof/sandbox-python:1',
+  SANDBOX_IMAGE_TOOLS: 'writecode-proof/sandbox-tools:1',
   RUN_BUDGET_S: 480,
   MAX_CONCURRENT_RUNS: 1,
 } as const;

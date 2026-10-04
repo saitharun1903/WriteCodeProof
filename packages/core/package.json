@@ -16,6 +16,7 @@
     "dist"
   ],
   "dependencies": {
+    "dockerode": "^5.0.1",
     "picomatch": "^4.0.7",
     "tree-sitter-javascript": "^0.25.0",
     "tree-sitter-python": "^0.25.0",
