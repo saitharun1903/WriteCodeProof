@@ -13,10 +13,12 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "harness"
   ],
   "dependencies": {
     "dockerode": "^5.0.1",
+    "fast-xml-parser": "^5.11.2",
     "picomatch": "^4.0.7",
     "tree-sitter-javascript": "^0.25.0",
     "tree-sitter-python": "^0.25.0",

@@ -59,6 +59,14 @@ export const envSchema = z
     LLM_MODEL: z.preprocess(blankToUndefined, z.string().default(DEFAULTS.LLM_MODEL)),
     LLM_BASE_URL: optionalUrl,
     LLM_API_KEY: optionalString,
+    LLM_TIMEOUT_S: positiveInt(DEFAULTS.LLM_TIMEOUT_S),
+    LLM_TEMPERATURE: z.preprocess(
+      blankToUndefined,
+      z.coerce.number().min(0).max(2).default(DEFAULTS.LLM_TEMPERATURE),
+    ),
+    LLM_MAX_TOKENS: positiveInt(DEFAULTS.LLM_MAX_TOKENS),
+    // Where LLM replies are cached. Blank = the user cache folder.
+    LLM_CACHE_DIR: optionalString,
 
     // Sandbox
     SANDBOX_CPUS: positiveNumber(DEFAULTS.SANDBOX_CPUS),

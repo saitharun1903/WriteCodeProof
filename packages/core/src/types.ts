@@ -97,3 +97,37 @@ export interface ChangeSet {
     deletions: number;
   };
 }
+
+export type CheckName = 'existing_tests' | 'generated_tests' | 'behaviour_diff' | 'security';
+export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+
+export interface Finding {
+  check: CheckName;
+  severity: Severity;
+  /** One line a reviewer can act on, e.g. "cheapestItem([]) throws TypeError (was null)". */
+  title: string;
+  file: string | null;
+  line: number | null;
+  function: string | null;
+  /** Structured details (inputs, outputs, messages). Never whole source files. */
+  detail: Record<string, unknown>;
+}
+
+/**
+ * passed: ran, nothing wrong. warning: ran, found something. failed: found
+ * something that should block. skipped: nothing to do or not applicable.
+ * error: the check itself could not run.
+ */
+export type CheckStatus = 'passed' | 'warning' | 'failed' | 'skipped' | 'error';
+
+export interface CheckResult {
+  check: CheckName;
+  status: CheckStatus;
+  /** Short line for the report table, e.g. "118 run, 118 pass". */
+  summary: string;
+  findings: Finding[];
+  stats: Record<string, number>;
+  /** Things skipped or worth knowing, with the reason. */
+  notes: string[];
+  durationMs: number;
+}

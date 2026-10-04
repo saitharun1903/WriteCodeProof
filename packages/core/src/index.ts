@@ -1,4 +1,10 @@
-export { ANALYSIS_DEFAULTS, DEFAULTS, LLM_PROVIDERS, LOG_LEVELS } from './config/defaults.js';
+export {
+  ANALYSIS_DEFAULTS,
+  CHECK_DEFAULTS,
+  DEFAULTS,
+  LLM_PROVIDERS,
+  LOG_LEVELS,
+} from './config/defaults.js';
 export type { LlmProviderName, LogLevel } from './config/defaults.js';
 export {
   ConfigError,
@@ -36,3 +42,46 @@ export {
 } from './sandbox/spec.js';
 export type { StepSpec, VolumeMount } from './sandbox/spec.js';
 export { assertInsideRoot, createWorkdir, removeWorkdir } from './sandbox/workdir.js';
+export {
+  behaviourDiffCheck,
+  edgeCaseInputs,
+  planBehaviourDiff,
+  positionalParams,
+} from './checks/behaviourDiff.js';
+export type { BehaviourPlan } from './checks/behaviourDiff.js';
+export { existingTestsCheck } from './checks/existingTests.js';
+export {
+  draftGeneratedTests,
+  generatedTestsCheck,
+  sanitizeTestCode,
+} from './checks/generatedTests.js';
+export type { DraftedTests } from './checks/generatedTests.js';
+export { makeMutants } from './checks/mutants.js';
+export type { Mutant } from './checks/mutants.js';
+export {
+  compareOutcomes,
+  describeChange,
+  diffPaths,
+  exampleRank,
+  formatValue,
+} from './checks/outcomes.js';
+export type { Outcome, ValueStyle } from './checks/outcomes.js';
+export { securityCheck, semgrepSeverity } from './checks/security.js';
+export { jsImportCandidates, pyImportCandidates } from './checks/testFiles.js';
+export { parseJestJson, parseJUnit } from './checks/testResults.js';
+export type { TestCase } from './checks/testResults.js';
+export { CachedProvider, defaultCacheDir } from './llm/cache.js';
+export { completeJson, extractCode, extractJson } from './llm/json.js';
+export {
+  AnthropicProvider,
+  createLlmProvider,
+  OllamaProvider,
+  OpenAiCompatibleProvider,
+} from './llm/providers.js';
+export { LlmError, LlmOutputError } from './llm/types.js';
+export type { CompleteOptions, LlmProvider } from './llm/types.js';
+export { runProof } from './run.js';
+export type { ProofOptions, ProofRun } from './run.js';
+export { applyWorkingTree, exportCommit } from './workspace/checkout.js';
+export { prepareWorkspace, RunContext } from './workspace/context.js';
+export { detectProjects } from './workspace/project.js';

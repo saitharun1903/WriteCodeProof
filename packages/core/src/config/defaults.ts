@@ -11,6 +11,10 @@ export const DEFAULTS = {
   LLM_PROVIDER: 'ollama',
   OLLAMA_URL: 'http://localhost:11434',
   LLM_MODEL: 'qwen2.5-coder:7b',
+  ANTHROPIC_URL: 'https://api.anthropic.com',
+  LLM_TIMEOUT_S: 180,
+  LLM_TEMPERATURE: 0.2,
+  LLM_MAX_TOKENS: 2048,
 
   SANDBOX_CPUS: 1,
   SANDBOX_MEMORY: '2g',
@@ -71,6 +75,27 @@ export const ANALYSIS_DEFAULTS = {
     '**/*_test.py',
     '**/conftest.py',
   ],
+} as const;
+
+/** Per-run defaults for the checks. `.writecode/proof.yml` and CLI flags override them. */
+export const CHECK_DEFAULTS = {
+  /** Spec 5b: generated tests are written for at most this many functions per run. */
+  GENERATED_TESTS_MAX_FUNCTIONS: 10,
+  /** Spec 5b: mutants tried per function to weed out weak tests. */
+  MUTANTS_PER_FUNCTION: 2,
+  /** Spec 5c: inputs asked from the LLM per function. */
+  BEHAVIOUR_LLM_INPUTS: 10,
+  /** Upper bound after adding generic edge-case inputs. */
+  BEHAVIOUR_MAX_INPUTS: 30,
+  /** A single function call longer than this counts as hanging. */
+  CALL_TIMEOUT_MS: 2000,
+  /** Single generated or existing test longer than this is stopped. */
+  TEST_TIMEOUT_MS: 10_000,
+  /** Clock and seed used so both sides see the same "random" values and time. */
+  FROZEN_TIME_ISO: '2025-01-01T00:00:00.000Z',
+  RANDOM_SEED: 1337,
+  /** Characters of failure output kept per finding. */
+  MAX_MESSAGE_CHARS: 500,
 } as const;
 
 export const LLM_PROVIDERS = ['ollama', 'openai-compatible', 'anthropic'] as const;

@@ -4,7 +4,13 @@
 ARG NODE_VERSION=24.21.0
 FROM node:${NODE_VERSION}-trixie-slim
 
+# Dependencies are installed into a per-lockfile Docker volume mounted at
+# /deps. The folder is created here, owned by uid 1000, so a fresh volume
+# inherits that owner. /node_modules points into it: Node looks there last
+# when resolving packages, so code anywhere under /work finds them.
 # The base image's "node" user is already uid/gid 1000.
+RUN mkdir -p /deps && chown 1000:1000 /deps && ln -s /deps/node_modules /node_modules
+
 ENV HOME=/tmp \
     CI=true \
     npm_config_cache=/tmp/.npm \

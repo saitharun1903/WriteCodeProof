@@ -11,8 +11,8 @@ The full spec is in [WRITECODE_PROOF_SPEC.md](WRITECODE_PROOF_SPEC.md).
 | 1     | Skeleton: workspaces, config, infra      | Done    |
 | 2     | Diff + changed-function detection        | Done    |
 | 3     | Docker sandbox runner                    | Done    |
-| 4     | Checks (tests, security, behaviour, gen) | Next    |
-| 5     | Risk score + CLI                         | Pending |
+| 4     | Checks (tests, security, behaviour, gen) | Done    |
+| 5     | Risk score + CLI                         | Next    |
 | 6     | GitHub App                               | Pending |
 | 7     | Dashboard                                | Pending |
 | 8     | Hardening                                | Pending |
@@ -42,18 +42,20 @@ This starts Postgres on `127.0.0.1:5433` and Redis on `127.0.0.1:6380`, then wai
 
 ## Commands
 
-| Command                | Does                                    |
-| ---------------------- | --------------------------------------- |
-| `npm test`             | Run all tests (no build needed)         |
-| `npm run build`        | Compile every package to `dist/`        |
-| `npm run lint`         | ESLint                                  |
-| `npm run format`       | Prettier                                |
-| `npm run infra:up`     | Start Postgres + Redis                  |
-| `npm run infra:down`   | Stop them (data stays in the volumes)   |
-| `npm run infra:logs`   | Follow their logs                       |
-| `npm run examples`     | Build the sample repos in `.examples/`  |
-| `npm run build:images` | Build the three sandbox images          |
-| `npm run test:sandbox` | Docker tests proving the sandbox limits |
+| Command                   | Does                                             |
+| ------------------------- | ------------------------------------------------ |
+| `npm test`                | Run all tests (no build needed)                  |
+| `npm run build`           | Compile every package to `dist/`                 |
+| `npm run lint`            | ESLint                                           |
+| `npm run format`          | Prettier                                         |
+| `npm run infra:up`        | Start Postgres + Redis                           |
+| `npm run infra:down`      | Stop them (data stays in the volumes)            |
+| `npm run infra:logs`      | Follow their logs                                |
+| `npm run examples`        | Build the sample repos in `.examples/`           |
+| `npm run build:images`    | Build the three sandbox images                   |
+| `npm run test:sandbox`    | Docker tests proving the sandbox limits          |
+| `npm run proof -- <repo>` | Run all checks on a repo (until the CLI lands)   |
+| `npm run cache:clear`     | Remove cached dependency volumes and LLM replies |
 
 ## Layout
 
@@ -124,6 +126,32 @@ Images, from `sandbox-images/`:
 
 Scans run offline, so the Semgrep community rules (about 1,000) are downloaded when the tools image is built. Rebuild it to pick up newer rules.
 
+## Checks
+
+A run exports base and head into a fresh temp folder, installs dependencies once per lockfile, then runs four checks. The model works in the background while the sandbox runs the first two.
+
+**Existing tests.** Finds vitest, jest or pytest tests that import a changed file (or the whole suite if none do), runs them on base and head, and flags any test that passed before and fails now.
+
+**Security.** Semgrep runs on the changed files of both sides; only findings that are new on head are reported, matched by rule and code so a shifted line is not "new". Gitleaks scans only the added lines, with `--redact`, so a leaked secret is never copied into a report. Any secret is critical.
+
+**Behaviour diff.** Each modified, exported function is called with the same inputs on base and head: up to 10 from the model (it sees both versions and picks inputs likely to split them) plus generic edge cases like `[]`, `0`, `1.999` and `null`. `Math.random`, `Date`, `random` and `time.time` are frozen; each side runs twice and anything that differs between identical runs is ignored. A call that hangs is stopped and reported. Results read like `cheapestItem([]) throws TypeError (was null)`. Same error type with a different message is not counted as a change.
+
+**Generated tests.** For up to 10 changed functions, the model writes 4–6 tests (`node:test` for JS/TS, pytest for Python). Files that don't load are dropped. Tests then run on head and, for modified functions, on base:
+
+- passes on base, fails on head → reported (medium): the change broke something the old code did right
+- fails on both → dropped: the model guessed wrong
+- new function, fails → shown as unconfirmed (info), not scored
+
+Passing tests are run against up to 2 mutants of the function (a flipped comparison, a changed constant, an early return). A test that fails on none of them checks nothing and is counted as weak.
+
+JS tests use Node's built-in runner rather than the repo's own, so they run the same way in every repo, with no config to load and nothing to install.
+
+### Speed
+
+On a laptop with a 4 GB GPU, `qwen2.5-coder:7b` writes about 7 tokens a second, so a first run on `js-sample` takes about 2.5–3 minutes. Model replies are cached by prompt, so runs on unchanged code take under a minute. Dependency installs are cached in Docker volumes per lockfile. `npm run cache:clear` removes both.
+
+Install scripts are not run (`--ignore-scripts`): the install step is the only one with network access, and lifecycle scripts would be repository code running online.
+
 ## Sample repos
 
 `examples/js-sample` and `examples/py-sample` are small shopping-cart modules. Each has a `base/` version and a `pr/` version with planted bugs:
@@ -182,3 +210,27 @@ npm run test:sandbox
 ```
 
 The 12 tests in [sandbox.docker.test.ts](tests/sandbox/sandbox.docker.test.ts) start real containers and check, from inside them: uid 1000 with zero capabilities, no network interface besides `lo` (DNS and HTTP both fail), writes fail everywhere except `/work` and `/tmp`, no Docker socket and no extra mounts, a stuck process is killed at its timeout and its container removed, the memory and process limits kill or block runaway code, and Python, pytest, Semgrep and Gitleaks all work with no network.
+
+## Verifying Phase 4
+
+Docker Desktop and Ollama must be running, with the model pulled (`ollama pull qwen2.5-coder:7b`).
+
+```bash
+npm run build:images
+```
+
+```bash
+npm run test:sandbox
+```
+
+[checks.docker.test.ts](tests/sandbox/checks.docker.test.ts) runs the whole pipeline on both samples with a scripted model, so results are exact: the empty-list crash and the rounding change are reported by the behaviour diff and confirmed by generated tests, existing tests pass, nothing is left behind. It also checks a broken existing test, new vs pre-existing Semgrep findings, and that a planted GitHub token is caught but never appears in the output. Add `WCP_TEST_LLM=1` to also run once with the real model.
+
+To see a full run with your model:
+
+```bash
+npm run examples
+```
+
+```bash
+npm run proof -- .examples/js-sample
+```

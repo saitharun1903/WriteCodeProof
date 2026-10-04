@@ -23,7 +23,9 @@
     "infra:logs": "docker compose logs -f",
     "examples": "node scripts/example-repo.mjs js-sample && node scripts/example-repo.mjs py-sample",
     "build:images": "npm run build && node scripts/build-images.mjs",
-    "test:sandbox": "vitest run --config vitest.sandbox.config.ts"
+    "test:sandbox": "vitest run --config vitest.sandbox.config.ts",
+    "cache:clear": "node scripts/clear-cache.mjs",
+    "proof": "npm run build && node scripts/proof.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

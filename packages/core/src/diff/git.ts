@@ -10,13 +10,15 @@ export class GitError extends Error {
 
 export interface GitOptions {
   maxBuffer?: number;
+  /** Extra environment variables, e.g. GIT_INDEX_FILE. */
+  env?: Record<string, string>;
 }
 
 function run(
   cwd: string,
   args: string[],
   encoding: 'utf8' | 'buffer',
-  { maxBuffer = ANALYSIS_DEFAULTS.GIT_MAX_BUFFER_BYTES }: GitOptions,
+  { maxBuffer = ANALYSIS_DEFAULTS.GIT_MAX_BUFFER_BYTES, env }: GitOptions,
 ): Promise<string | Buffer> {
   // Pin settings that change output format, whatever the user's git config says.
   const fullArgs = ['-c', 'core.quotePath=false', '-c', 'color.ui=never', ...args];
@@ -24,7 +26,13 @@ function run(
     execFile(
       'git',
       fullArgs,
-      { cwd, encoding, maxBuffer, windowsHide: true },
+      {
+        cwd,
+        encoding,
+        maxBuffer,
+        windowsHide: true,
+        env: env ? { ...process.env, ...env } : undefined,
+      },
       (error, stdout, stderr) => {
         if (error) {
           const detail = String(stderr ?? '').trim() || error.message;

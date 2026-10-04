@@ -40,7 +40,6 @@ describe('buildContainerSpec', () => {
   it('applies every limit from spec section 6', () => {
     const spec = buildContainerSpec(settings, step());
     const host = spec.HostConfig!;
-    expect(spec.NetworkDisabled).toBe(true);
     expect(host.NetworkMode).toBe('none');
     expect(host.NanoCpus).toBe(settings.cpus * 1e9);
     expect(host.Memory).toBe(settings.memoryBytes);
@@ -67,7 +66,6 @@ describe('buildContainerSpec', () => {
 
   it('enables the network only when asked', () => {
     const spec = buildContainerSpec(settings, step({ allowNetwork: true }));
-    expect(spec.NetworkDisabled).toBe(false);
     expect(spec.HostConfig!.NetworkMode).toBe('bridge');
     // Every other limit still applies.
     expect(spec.HostConfig!.ReadonlyRootfs).toBe(true);

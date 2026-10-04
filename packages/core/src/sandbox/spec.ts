@@ -91,8 +91,9 @@ export function buildContainerSpec(
     AttachStdin: false,
     AttachStdout: true,
     AttachStderr: true,
-    NetworkDisabled: !spec.allowNetwork,
     HostConfig: {
+      // "none" leaves only the loopback interface. (NetworkDisabled is not used:
+      // it also empties /etc/hosts, so even "localhost" stops resolving.)
       NetworkMode: spec.allowNetwork ? 'bridge' : 'none',
       NanoCpus: Math.round(settings.cpus * 1e9),
       Memory: settings.memoryBytes,

@@ -82,6 +82,7 @@ describe('sandbox limits', () => {
       (async () => {
         const out = { interfaces: Object.keys(os.networkInterfaces()) };
         try { await dns.lookup('example.com'); out.dns = 'ok'; } catch (e) { out.dns = e.code; }
+        try { out.localhost = (await dns.lookup('localhost')).address; } catch (e) { out.localhost = e.code; }
         try {
           await fetch('http://1.1.1.1', { signal: AbortSignal.timeout(3000) });
           out.http = 'ok';
@@ -90,7 +91,11 @@ describe('sandbox limits', () => {
       })();
     `);
     expect(result.exitCode).toBe(0);
-    const out = json<{ interfaces: string[]; dns: string; http: string }>(result.stdout);
+    const out = json<{ interfaces: string[]; dns: string; http: string; localhost: string }>(
+      result.stdout,
+    );
+    // Loopback still works: test runners often bind to localhost.
+    expect(out.localhost).toMatch(/^(127.0.0.1|::1)$/);
     expect(out.interfaces).toEqual(['lo']);
     expect(out.dns).not.toBe('ok');
     expect(out.http).toBe('failed');
