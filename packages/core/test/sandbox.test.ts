@@ -12,6 +12,7 @@ import {
   removeWorkdir,
   RunBudget,
   SandboxError,
+  waitForExit,
   sandboxSettingsFromEnv,
   type StepSpec,
 } from '../src/index.js';
@@ -160,5 +161,31 @@ describe('workdirs', () => {
     mkdirSync(join(inside, 'nested'));
     await removeWorkdir(root, inside);
     expect(existsSync(inside)).toBe(false);
+  });
+});
+
+describe('waitForExit', () => {
+  const never = () => new Promise<never>(() => undefined);
+
+  it('notices the exit even when Docker never answers the wait call', async () => {
+    let inspections = 0;
+    const container = {
+      wait: never,
+      inspect: async () => {
+        inspections++;
+        return { State: { Running: inspections < 2, Restarting: false, ExitCode: 137 } };
+      },
+    };
+    expect(await waitForExit(container as never, 30_000)).toBe(137);
+  }, 15_000);
+
+  it('gives up at the deadline when Docker stops responding entirely', async () => {
+    const container = { wait: never, inspect: never };
+    await expect(waitForExit(container as never, 500)).rejects.toThrow(/stopped responding/);
+  });
+
+  it('uses the wait result when it arrives', async () => {
+    const container = { wait: async () => ({ StatusCode: 3 }), inspect: never };
+    expect(await waitForExit(container as never, 30_000)).toBe(3);
   });
 });

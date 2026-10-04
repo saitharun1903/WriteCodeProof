@@ -29,7 +29,7 @@ export type * from './types.js';
 export { readPackageVersion } from './version.js';
 export { RunBudget } from './sandbox/budget.js';
 export { BudgetExceededError, SandboxError } from './sandbox/errors.js';
-export { Sandbox } from './sandbox/runner.js';
+export { Sandbox, waitForExit } from './sandbox/runner.js';
 export type { StepOptions, StepResult } from './sandbox/runner.js';
 export { imageForLanguage, parseDockerSize, sandboxSettingsFromEnv } from './sandbox/settings.js';
 export type { SandboxSettings } from './sandbox/settings.js';
