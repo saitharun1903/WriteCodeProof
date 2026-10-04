@@ -31,6 +31,11 @@ export interface CollectOptions {
   base?: string;
   /** Branch, tag or commit to check. Omit to use the working tree, including uncommitted changes. */
   head?: string;
+  /**
+   * Diff against `base` itself instead of its merge-base with head. For
+   * shallow clones where the merge-base was not fetched.
+   */
+  exactBase?: boolean;
   /** Extra globs to skip, on top of the defaults. */
   ignore?: readonly string[];
   /** Replace the default ignore globs instead of adding to them. */
@@ -110,7 +115,9 @@ export async function collectChanges(options: CollectOptions): Promise<ChangeSet
   const root = await repoRoot(options.repoPath);
   const baseCommit = await resolveCommit(root, baseRef);
   const headSha = headRef ? await resolveCommit(root, headRef) : null;
-  const baseSha = await mergeBase(root, baseCommit, headSha ?? (await resolveCommit(root, 'HEAD')));
+  const baseSha = options.exactBase
+    ? baseCommit
+    : await mergeBase(root, baseCommit, headSha ?? (await resolveCommit(root, 'HEAD')));
 
   const files = parseUnifiedDiff(await unifiedDiff(root, baseSha, headSha, gitOptions));
   if (!headSha) files.push(...(await untrackedEntries(root, isIgnored)));

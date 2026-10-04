@@ -19,7 +19,8 @@ export { changedFunctions } from './diff/changedFunctions.js';
 export type { FileVersions } from './diff/changedFunctions.js';
 export { collectChanges } from './diff/collect.js';
 export type { CollectOptions } from './diff/collect.js';
-export { GitError, repoRoot } from './diff/git.js';
+export { git, GitError, repoRoot } from './diff/git.js';
+export type { GitOptions } from './diff/git.js';
 export { parseUnifiedDiff, unquoteGitPath } from './diff/unifiedDiff.js';
 export { extractFunctions } from './parse/functions.js';
 export type { ExtractResult } from './parse/functions.js';
@@ -114,5 +115,10 @@ export {
   STATUS_ICON,
 } from './report/common.js';
 export type { Report } from './report/common.js';
-export { COMMENT_MARKER, escapeMarkdown, renderMarkdown } from './report/markdown.js';
+export {
+  COMMENT_MARKER,
+  escapeMarkdown,
+  renderErrorMarkdown,
+  renderMarkdown,
+} from './report/markdown.js';
 export { JSON_REPORT_VERSION, toJsonReport } from './report/json.js';

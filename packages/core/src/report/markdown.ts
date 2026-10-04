@@ -97,3 +97,22 @@ export function renderMarkdown(report: Report): string {
   );
   return `${lines.join('\n')}\n`;
 }
+
+/** Comment for a run that could not finish: says what went wrong, replaces any older report. */
+export function renderErrorMarkdown(message: string, runId: string, durationMs: number): string {
+  return [
+    COMMENT_MARKER,
+    `## ${PRODUCT} · Could not finish`,
+    '',
+    'The checks did not complete for this push, so there is no risk score.',
+    '',
+    '```',
+    message.replace(/```/g, "'''"),
+    '```',
+    '',
+    'Push again or re-run the check to retry.',
+    '',
+    `<sub>Run ${shortId(runId)} · ${formatDuration(durationMs)} · ${PRODUCT}</sub>`,
+    '',
+  ].join('\n');
+}

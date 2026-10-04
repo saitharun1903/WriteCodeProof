@@ -1,8 +1,23 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/core" },
-    { "path": "packages/cli" },
-    { "path": "packages/api" }
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/db"
+    },
+    {
+      "path": "packages/github"
+    },
+    {
+      "path": "packages/worker"
+    },
+    {
+      "path": "packages/cli"
+    },
+    {
+      "path": "packages/api"
+    }
   ]
 }

@@ -5,6 +5,12 @@
  */
 export const DEFAULTS = {
   HOST: '127.0.0.1',
+
+  GITHUB_API_URL: 'https://api.github.com',
+  /** PRs with this label count as AI-authored (spec section 7). */
+  GITHUB_AI_LABEL: 'ai-generated',
+  /** Spec 5 step 1–2: shallow clone depth for PR checkouts. */
+  CLONE_DEPTH: 50,
   PORT: 3100,
   LOG_LEVEL: 'info',
 

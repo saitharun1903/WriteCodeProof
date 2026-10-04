@@ -1,0 +1,28 @@
+{
+  "name": "@writecode-proof/worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Queue consumer: runs the engine on pull requests and reports back to GitHub.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@writecode-proof/core": "0.1.0",
+    "@writecode-proof/db": "0.1.0",
+    "@writecode-proof/github": "0.1.0",
+    "bullmq": "6.3.11",
+    "pino": "^10.4.0"
+  }
+}

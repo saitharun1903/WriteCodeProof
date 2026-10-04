@@ -9,12 +9,6 @@
   "references": [
     {
       "path": "../core"
-    },
-    {
-      "path": "../db"
-    },
-    {
-      "path": "../github"
     }
   ]
 }

@@ -24,17 +24,22 @@
     "examples": "node scripts/example-repo.mjs js-sample && node scripts/example-repo.mjs py-sample",
     "build:images": "npm run build && node scripts/build-images.mjs",
     "test:sandbox": "npm run build && vitest run --config vitest.sandbox.config.ts",
-    "cache:clear": "node scripts/clear-cache.mjs"
+    "cache:clear": "node scripts/clear-cache.mjs",
+    "db:generate": "cd packages/db && drizzle-kit generate",
+    "dev": "npm run build && node scripts/dev.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/dockerode": "^4.0.1",
     "@types/node": "^26.6.4",
+    "@types/pg": "^8.23.1",
     "@types/picomatch": "^4.0.3",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^10.12.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
     "prettier": "^3.9.9",
+    "smee-client": "^5.0.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.0",
     "vitest": "^5.0.3"

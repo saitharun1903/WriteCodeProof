@@ -39,6 +39,11 @@ export const envSchema = z
     GITHUB_PRIVATE_KEY_PATH: optionalString,
     GITHUB_WEBHOOK_SECRET: optionalString,
     WEBHOOK_PROXY_URL: optionalUrl,
+    GITHUB_API_URL: z.preprocess(blankToUndefined, z.url().default(DEFAULTS.GITHUB_API_URL)),
+    GITHUB_AI_LABEL: z.preprocess(blankToUndefined, z.string().default(DEFAULTS.GITHUB_AI_LABEL)),
+    CLONE_DEPTH: positiveInt(DEFAULTS.CLONE_DEPTH),
+    // Where PR clones go. Blank = the OS temp folder.
+    CLONE_ROOT: optionalString,
 
     // Infra
     DATABASE_URL: optionalUrl,

@@ -6,16 +6,16 @@ The full spec is in [WRITECODE_PROOF_SPEC.md](WRITECODE_PROOF_SPEC.md).
 
 ## Status
 
-| Phase | What                                     | State   |
-| ----- | ---------------------------------------- | ------- |
-| 1     | Skeleton: workspaces, config, infra      | Done    |
-| 2     | Diff + changed-function detection        | Done    |
-| 3     | Docker sandbox runner                    | Done    |
-| 4     | Checks (tests, security, behaviour, gen) | Done    |
-| 5     | Risk score + CLI                         | Done    |
-| 6     | GitHub App                               | Next    |
-| 7     | Dashboard                                | Pending |
-| 8     | Hardening                                | Pending |
+| Phase | What                                     | State                             |
+| ----- | ---------------------------------------- | --------------------------------- |
+| 1     | Skeleton: workspaces, config, infra      | Done                              |
+| 2     | Diff + changed-function detection        | Done                              |
+| 3     | Docker sandbox runner                    | Done                              |
+| 4     | Checks (tests, security, behaviour, gen) | Done                              |
+| 5     | Risk score + CLI                         | Done                              |
+| 6     | GitHub App                               | Done (needs your app to try live) |
+| 7     | Dashboard                                | Next                              |
+| 8     | Hardening                                | Pending                           |
 
 ## Requirements
 
@@ -55,6 +55,8 @@ This starts Postgres on `127.0.0.1:5433` and Redis on `127.0.0.1:6380`, then wai
 | `npm run build:images` | Build the three sandbox images                   |
 | `npm run test:sandbox` | Docker tests proving the sandbox limits          |
 | `npm run cache:clear`  | Remove cached dependency volumes and LLM replies |
+| `npm run dev`          | API + worker + smee.io relay, for the GitHub App |
+| `npm run db:generate`  | New SQL migration after a schema change          |
 
 ## Layout
 
@@ -62,13 +64,16 @@ This starts Postgres on `127.0.0.1:5433` and Redis on `127.0.0.1:6380`, then wai
 packages/
   core/   engine shared by the CLI and the worker (config lives here)
   cli/    the `writecode-proof` command
-  api/    Fastify server: /health now; /webhook and /api/runs later
+  api/    Fastify server: /webhook, /api/runs, /health
+  db/     Postgres schema, migrations and queries (Drizzle)
+  github/ webhooks, the run queue, PR comments, check runs, cloning
+  worker/ queue consumer that runs the engine on pull requests
 examples/ sample projects, each as base/ and pr/ snapshots
 scripts/  dev helpers (example-repo.mjs turns a sample into a git repo)
 tests/    checks that span the whole repo
 ```
 
-`packages/worker` and `packages/dashboard` get added in Phases 6 and 7.
+`packages/dashboard` gets added in Phase 7.
 
 ## Configuration
 
@@ -192,6 +197,55 @@ policies:
 ```
 
 Every key is optional except `version`. Unknown keys and bad values are reported and the defaults are used. With `tests.command` set, the command runs on both versions and "passed before, fails now" is flagged.
+
+## GitHub App
+
+```
+pull_request opened / synchronize / reopened
+  → /webhook: verify signature → pending "WriteCode Proof" check → queue (Redis)
+  → worker: shallow clone base + head → checks → score
+  → one PR comment (updated in place on every push) + completed check → Postgres
+```
+
+- **One run per PR.** A new push replaces a run that is still waiting; a run already in progress notices it is stale and stops without posting. Both end as a neutral "Superseded by a newer push" check.
+- **Config comes from the base branch**, so a pull request cannot loosen the rules it is checked against.
+- **AI-authored** means a bot author or the `ai-generated` label (`GITHUB_AI_LABEL`).
+- **Status check:** success for Low and Medium, neutral for High (failure with `mode: enforce`), failure for Blocked.
+- **If a run fails**, the comment says what went wrong, the check is neutral, and the run is stored as an error.
+- **The installation token** reaches git through environment variables: it is never on a command line or written to disk.
+
+### Setting it up
+
+1. On GitHub: Settings → Developer settings → GitHub Apps → New GitHub App.
+   - Webhook URL: create a channel at https://smee.io and paste its URL.
+   - Webhook secret: any long random string.
+   - Repository permissions: Checks read & write, Contents read, Pull requests read & write, Metadata read.
+   - Subscribe to events: Pull request.
+2. After creating it, note the App ID and generate a private key. Save the key as `github-app.pem` in this folder (gitignored).
+3. In `.env`: `GITHUB_APP_ID`, `GITHUB_WEBHOOK_SECRET`, `WEBHOOK_PROXY_URL` (the smee URL).
+4. Install the app on a test repository.
+5. Run:
+
+```bash
+npm run infra:up
+```
+
+```bash
+npm run dev
+```
+
+Then open a pull request on the test repository. Without the app settings the API still starts; the webhook answers 503 and the log says which setting is missing.
+
+### API
+
+| Method | Path                                         | Returns                                                     |
+| ------ | -------------------------------------------- | ----------------------------------------------------------- |
+| POST   | `/webhook`                                   | GitHub deliveries (signature checked against the raw body)  |
+| GET    | `/api/runs?page=1&pageSize=20&source=github` | Runs, newest first                                          |
+| GET    | `/api/runs/:id`                              | One run with its checks and findings                        |
+| GET    | `/health`                                    | Liveness, plus whether the database and queue are reachable |
+
+The database stores runs, findings and short snippets; never source code. Tables are created on start-up from the SQL in `packages/db/migrations`.
 
 ## Checks
 
@@ -319,3 +373,15 @@ npx writecode-proof check .examples/js-sample
 The samples live in `examples/<name>` as `base/` and `pr/` folders; `npm run examples` turns them into git repos under `.examples/`, which is what `check` needs. With Ollama and `qwen2.5-coder:7b` on a 4 GB laptop GPU a first run takes about 2.5 minutes and prints Risk 10/10 High (exit code 1), with the crash and the rounding change listed under Why.
 
 [cli.docker.test.ts](tests/sandbox/cli.docker.test.ts) runs the built command against real repos: JSON and Markdown output, every exit code (Medium 0, High 1, Blocked 2, tool error 3), `--ai-authored`, the repo config and `doctor`.
+
+## Verifying Phase 6
+
+Postgres and Redis must be up (`npm run infra:up`).
+
+```bash
+npm run test:sandbox
+```
+
+[github.docker.test.ts](tests/sandbox/github.docker.test.ts) runs the whole GitHub flow against real Postgres and Redis, the real queue and worker, and a real git remote serving `refs/pull/1/head` the way GitHub does; only the GitHub API is a recorder. It checks: a pending check, then one comment with the score and a successful check; the run and its findings in Postgres and on `/api/runs`; a second push updating the same comment; a push that replaces a waiting run; and a failing clone producing an error comment, a neutral check and an error run. It uses its own database and Redis prefix and removes them afterwards.
+
+The live test needs your GitHub App (see Setting it up): open a pull request on the test repo, check the comment and the "WriteCode Proof" check appear, push again and check the same comment changes.
