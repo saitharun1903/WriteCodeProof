@@ -1,0 +1,20 @@
+{
+  "name": "writecode-proof",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Run a WriteCode Proof check on a local repository.",
+  "type": "module",
+  "bin": {
+    "writecode-proof": "./dist/index.js"
+  },
+  "main": "./dist/program.js",
+  "types": "./dist/program.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@writecode-proof/core": "0.1.0",
+    "commander": "^15.0.0",
+    "picocolors": "^1.1.1"
+  }
+}

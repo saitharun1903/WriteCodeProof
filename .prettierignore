@@ -1,0 +1,6 @@
+node_modules
+dist
+coverage
+package-lock.json
+WRITECODE_PROOF_SPEC.md
+CLAUDE.md

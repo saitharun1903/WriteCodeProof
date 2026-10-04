@@ -1,0 +1,21 @@
+{
+  "name": "@writecode-proof/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Proof engine shared by the CLI and the worker.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "zod": "^4.6.5"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@writecode-proof/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HTTP API: GitHub webhooks, run listing and health.",
+  "type": "module",
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "scripts": {
+    "start": "node dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@writecode-proof/core": "0.1.0",
+    "fastify": "^5.12.5"
+  }
+}
