@@ -15,7 +15,7 @@ The full spec is in [WRITECODE_PROOF_SPEC.md](WRITECODE_PROOF_SPEC.md).
 | 5     | Risk score + CLI                         | Done                              |
 | 6     | GitHub App                               | Done (needs your app to try live) |
 | 7     | Dashboard                                | Done                              |
-| 8     | Hardening                                | Next                              |
+| 8     | Hardening                                | Done                              |
 
 ## Requirements
 
@@ -284,6 +284,19 @@ On a laptop with a 4 GB GPU, `qwen2.5-coder:7b` writes about 7 tokens a second, 
 
 Install scripts are not run (`--ignore-scripts`): the install step is the only one with network access, and lifecycle scripts would be repository code running online.
 
+## When things go wrong
+
+A run never reports something it did not check.
+
+- **A check cannot run** (Docker stops, the model is unreachable, the time budget runs out): the report says **Incomplete** instead of Low/Medium/High, names each check that did not run and why, e.g. `Security: Could not run: Lost connection to Docker while starting a sandbox. Is Docker Desktop running?`. Findings made before the failure still count. The GitHub check is neutral (never success), the CLI exits with code 3, and the dashboard shows the run as Incomplete.
+- **The model stops answering**: the behaviour diff carries on with its own edge-case inputs; generated tests say `Could not run: Cannot reach Ollama at … Is Ollama running?`.
+- **Rate limits**: model APIs (429, 503, 529) are retried once after the wait they ask for, at most 30 s. GitHub API calls wait out primary and secondary rate limits (up to 60 s, twice) and retry server errors.
+- **Postgres is down**: pull requests are still checked and commented on; only the record is skipped (logged). The API answers 503 instead of an error page.
+- **Redis is down**: the webhook answers 503 within 5 s so GitHub can redeliver later; the API and worker log the problem and reconnect by themselves.
+- **The worker crashes mid-run**: the job is retried once; if it fails again, the pull request gets an error comment and a neutral check. Every 10 minutes (and at start-up) the worker removes containers, run folders and clones older than `RUN_BUDGET_S` + 10 minutes, and marks runs stuck as "running" as interrupted.
+- **Errors** are logged in full on the server; clients only get a short message, never SQL or stack traces.
+- **The API is rate-limited** per client (`RATE_LIMIT_PER_MINUTE`, default 120; `/health` is exempt). Set `TRUST_PROXY=true` behind nginx so the limit applies per real client.
+
 ## Sample repos
 
 `examples/js-sample` and `examples/py-sample` are small shopping-cart modules. Each has a `base/` version and a `pr/` version with planted bugs:
@@ -418,3 +431,117 @@ node packages/api/dist/index.js
 Open http://127.0.0.1:3100: the local check is listed; click it to see its checks and findings. Pull request runs appear the same way once the GitHub App is set up.
 
 Automated: [dashboard.test.tsx](packages/dashboard/test/dashboard.test.tsx) renders both pages against a fake API (runs from both sources, filters, empty and error states, findings order, deep links). [cli.docker.test.ts](tests/sandbox/cli.docker.test.ts) checks that a CLI run is stored with its findings, and [github.docker.test.ts](tests/sandbox/github.docker.test.ts) that a pull request run is, both read back through `/api/runs`.
+
+## Verifying Phase 8
+
+```bash
+npm run test:sandbox
+```
+
+[resilience.docker.test.ts](tests/sandbox/resilience.docker.test.ts) cuts Docker off in the middle of a real pull request run (the client is pointed at a socket that no longer exists, which is what it sees when Docker Desktop stops), points the model at a port where nothing listens part-way through, crashes a job outside the run, and leaves stale containers, folders and runs behind. It checks the pull request gets a clear Incomplete or error report, nothing crashes, the next run works, and the clean-up removes only what is old. To do it by hand, see "Breaking it on purpose" below.
+
+## Testing it yourself
+
+From an empty Windows machine to a checked pull request. About 30 minutes, most of it downloads.
+
+### 1. Install
+
+- Docker Desktop, with the WSL2 backend. Start it.
+- Node.js 20.12 or newer, and Git.
+- Ollama. Then:
+
+```bash
+ollama pull qwen2.5-coder:7b
+```
+
+### 2. Set up
+
+```bash
+npm install
+```
+
+```bash
+cp .env.example .env
+```
+
+In `.env`, set `POSTGRES_PASSWORD` and put the same password in `DATABASE_URL`. Then:
+
+```bash
+npm run infra:up
+```
+
+```bash
+npm run build:images
+```
+
+```bash
+npm run build
+```
+
+```bash
+npx writecode-proof doctor
+```
+
+Every line should be green. If not, the line says what to do.
+
+### 3. Check a change from the command line
+
+```bash
+npm run examples
+```
+
+```bash
+npx writecode-proof check .examples/js-sample
+```
+
+Expect Risk 10/10 High (exit code 1) within about 3 minutes on the first run, with `cheapestItem([]) throws TypeError (was null)` and a rounding change under Findings. A second run takes under a minute. Try the Python sample too, and `--no-llm` for a run without the model (6/10 Medium).
+
+To check your own project, run `check` in its folder; it compares your uncommitted work with `main` (`--base` for another branch).
+
+### 4. Look at the dashboard
+
+```bash
+node packages/api/dist/index.js
+```
+
+Open http://127.0.0.1:3100. The runs from step 3 are listed; click one for its checks and findings.
+
+### 5. Try it on a pull request
+
+Follow [Setting it up](#setting-it-up) under GitHub App, then `npm run dev` and open a pull request on your test repository. Within a few minutes the "WriteCode Proof" check and a comment appear. Push again: the same comment updates.
+
+### 6. Breaking it on purpose
+
+| Do this during a run                                   | You should see                                                                                                                                                                                                                      |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Quit Ollama                                            | Generated tests: "Could not run: Cannot reach Ollama…". Risk shows Incomplete; CLI exit code 3; PR check neutral.                                                                                                                   |
+| Quit Docker Desktop                                    | The checks still to run: "Could not run: Lost connection to Docker…". Incomplete as above. If Docker is gone before the run starts: "Cannot reach Docker. Is Docker Desktop running?" (exit code 3, or an error comment on the PR). |
+| `docker compose stop redis` with `npm run dev` running | Webhook deliveries fail with 503 (GitHub shows them as failed and can redeliver); nothing crashes. `docker compose start redis` and it carries on.                                                                                  |
+| `docker compose stop postgres`                         | The dashboard shows "Could not load runs"; pull requests are still checked and commented on.                                                                                                                                        |
+| Stop the worker (Ctrl+C twice) mid-run, start it again | The run is retried, or reported as "Could not finish" on the PR.                                                                                                                                                                    |
+
+### 7. Run the tests
+
+```bash
+npm test
+```
+
+```bash
+npm run test:sandbox
+```
+
+The first takes under a minute and needs nothing running. The second needs Docker, the images, Postgres and Redis, and takes about 15 minutes.
+
+### Troubleshooting
+
+| Message                                                | Fix                                                                                                                           |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `Cannot reach Docker. Is Docker Desktop running?`      | Start Docker Desktop and wait until it says it is running.                                                                    |
+| `Sandbox image … not found. Run: npm run build:images` | Run it; needed once, and after the Dockerfiles change.                                                                        |
+| `Ollama has no model "…"`                              | `ollama pull` the model named, or change `LLM_MODEL`.                                                                         |
+| `… is not inside a git repository`                     | Point `check` at a folder inside a git repo. For the samples, run `npm run examples` and use `.examples/<name>`.              |
+| `Cannot find "main"`                                   | The repo's main branch has another name: pass `--base master` (or whatever it is).                                            |
+| `set POSTGRES_PASSWORD in .env` when starting infra    | Copy `.env.example` to `.env` and set the password (step 2).                                                                  |
+| Port 5433, 6380 or 3100 already in use                 | Change `POSTGRES_PORT`, `REDIS_PORT` or `PORT` in `.env` (and `DATABASE_URL`/`REDIS_URL` to match).                           |
+| First run is slow                                      | The model writes about 7 tokens a second on a small GPU. Later runs reuse its answers; `--no-generate` or `--no-llm` skip it. |
+| Want a clean slate                                     | `npm run cache:clear` removes cached dependencies and model answers.                                                          |

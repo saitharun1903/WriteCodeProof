@@ -13,6 +13,7 @@
     "dist"
   ],
   "dependencies": {
+    "@fastify/rate-limit": "^11.2.0",
     "@fastify/static": "^10.1.5",
     "@writecode-proof/core": "0.1.0",
     "@writecode-proof/db": "0.1.0",

@@ -64,7 +64,9 @@ export async function handleWebhook(
     // The worker creates it later; a missing pending status must not lose the run.
     log('could not create check run', { error: (error as Error).message });
   }
-  await deps.store?.queued(job, runId);
+  await deps.store?.queued(job, runId).catch((error: unknown) => {
+    log('could not record the run; checking it anyway', { error: (error as Error).message });
+  });
   const replaced = await deps.enqueue({ ...job, runId, checkRunId });
 
   for (const old of replaced) {

@@ -16,6 +16,7 @@ import {
   githubSettingsFromEnv,
   RunQueue,
 } from '@writecode-proof/github';
+import { startMaintenance } from './maintenance.js';
 import { startWorker } from './worker.js';
 
 async function main(): Promise<void> {
@@ -31,7 +32,9 @@ async function main(): Promise<void> {
   if (database) await database.migrate();
   else logger.warn('DATABASE_URL not set: runs will not be stored');
 
-  const queue = new RunQueue(env.REDIS_URL);
+  const queue = new RunQueue(env.REDIS_URL, undefined, (error) =>
+    logger.warn({ error: error.message }, 'queue connection problem'),
+  );
   const app = new GitHubApp(settings);
   const llm = new CachedProvider(createLlmProvider(env), env.LLM_CACHE_DIR ?? defaultCacheDir());
 
@@ -54,6 +57,12 @@ async function main(): Promise<void> {
   worker.on('failed', (job, error) =>
     logger.error({ runId: job?.data.runId, error: error.message }, 'run failed'),
   );
+  const stopMaintenance = startMaintenance({
+    sandbox,
+    database,
+    cloneRoot: settings.cloneRoot,
+    log: (message, extra) => logger.warn(extra ?? {}, message),
+  });
   logger.info({ concurrency: env.MAX_CONCURRENT_RUNS }, 'worker ready');
 
   let stopping = false;
@@ -61,6 +70,7 @@ async function main(): Promise<void> {
     if (stopping) process.exit(1); // second signal: stop now
     stopping = true;
     logger.info({ signal }, 'finishing the current run, then stopping');
+    stopMaintenance();
     await worker.close();
     await queue.close();
     await database?.close();

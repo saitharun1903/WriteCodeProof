@@ -1,9 +1,9 @@
-import type { BAND_LABEL } from '@writecode-proof/core/labels';
 import {
-  BAND_ACTION,
+  BAND_LABEL,
   CHECK_LABEL,
   CHECK_ORDER,
   formatDuration,
+  riskHeadline,
   SEVERITY_ORDER,
   shortId,
 } from '@writecode-proof/core/labels';
@@ -93,14 +93,33 @@ function Summary({ run }: { run: Run }) {
     );
   }
   const band = run.riskBand as keyof typeof BAND_LABEL | null;
+  const unfinished = run.checks.filter((c) => c.status === 'error');
+  const headline =
+    band && band in BAND_LABEL ? riskHeadline({ band, incompleteChecks: unfinished }) : null;
   return (
-    <section className="risk-panel" aria-label="Risk">
-      <RiskBadge score={run.riskScore} band={run.riskBand} large />
-      <div>
-        {band && band in BAND_ACTION && <p className="risk-panel__action">{BAND_ACTION[band]}</p>}
-        {run.why && <p className="risk-panel__why">{run.why}</p>}
-      </div>
-    </section>
+    <>
+      <section className="risk-panel" aria-label="Risk">
+        <RiskBadge score={run.riskScore} band={run.riskBand} incomplete={run.incomplete} large />
+        <div>
+          {headline && <p className="risk-panel__action">{headline.action}</p>}
+          {run.why && <p className="risk-panel__why">{run.why}</p>}
+        </div>
+      </section>
+      {unfinished.length > 0 && (
+        <Message
+          tone="error"
+          title="Some checks did not finish, so this score only covers what ran."
+        >
+          <ul className="unfinished">
+            {unfinished.map((c) => (
+              <li key={c.check}>
+                <strong>{CHECK_LABEL[c.check as keyof typeof CHECK_LABEL]}:</strong> {c.summary}
+              </li>
+            ))}
+          </ul>
+        </Message>
+      )}
+    </>
   );
 }
 

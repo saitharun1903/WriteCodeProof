@@ -1,4 +1,4 @@
-import { BAND_LABEL, formatScore } from '@writecode-proof/core/labels';
+import { BAND_LABEL, formatScore, riskHeadline } from '@writecode-proof/core/labels';
 import type { ReactNode } from 'react';
 import type { RunSummary, StoredCheck } from './api.js';
 import { STATUS_LABEL } from './format.js';
@@ -9,19 +9,24 @@ const isBand = (value: string | null): value is Band => !!value && value in BAND
 export function RiskBadge({
   score,
   band,
+  incomplete = false,
   large,
 }: {
   score: number | null;
   band: string | null;
+  /** Some checks did not run: shown as "Incomplete" unless blocked. */
+  incomplete?: boolean;
   large?: boolean;
 }) {
   if (score === null || !isBand(band)) {
     return <span className="risk risk--none">–</span>;
   }
+  const { label } = riskHeadline({ band, incompleteChecks: incomplete ? [true] : [] });
+  const tone = label === 'Incomplete' ? 'incomplete' : band;
   return (
-    <span className={`risk risk--${band}${large ? ' risk--large' : ''}`}>
+    <span className={`risk risk--${tone}${large ? ' risk--large' : ''}`}>
       <span className="risk__score">{formatScore(score)}</span>
-      <span className="risk__band">{BAND_LABEL[band]}</span>
+      <span className="risk__band">{label}</span>
     </span>
   );
 }

@@ -19,6 +19,28 @@ export interface RunStore {
   finish(runId: string, outcome: FinishedRun | FailedRun): Promise<void>;
 }
 
+/**
+ * A store whose failures are logged, never thrown: recording a run is
+ * secondary to reporting it on the pull request.
+ */
+export function forgivingStore(
+  store: RunStore,
+  log: (message: string, extra?: Record<string, unknown>) => void,
+): RunStore {
+  const guard =
+    <A extends unknown[]>(name: string, call: (...args: A) => Promise<void>) =>
+    (...args: A) =>
+      call(...args).catch((error: unknown) => {
+        log(`could not record the run (${name})`, { error: (error as Error).message });
+      });
+  return {
+    queued: guard('queued', store.queued),
+    running: guard('running', store.running),
+    saveConfig: guard('saveConfig', store.saveConfig),
+    finish: guard('finish', store.finish),
+  };
+}
+
 export function dbRunStore(db: Db): RunStore {
   const repoId = async (job: PullRequestJob) => {
     const installationId = await upsertInstallation(db, job.installationId, job.accountLogin);

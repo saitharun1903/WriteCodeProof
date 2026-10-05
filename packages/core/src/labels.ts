@@ -58,3 +58,21 @@ export function formatDuration(ms: number): string {
 }
 
 export const shortId = (runId: string) => runId.slice(0, 8);
+
+/**
+ * Headline for a risk: band and what to do. A run where checks could not run
+ * is "Incomplete" unless it is already blocked: its score is a lower bound.
+ */
+export function riskHeadline(risk: { band: RiskBand; incompleteChecks: readonly unknown[] }): {
+  label: string;
+  action: string;
+} {
+  const missing = risk.incompleteChecks.length;
+  if (missing && risk.band !== 'blocked') {
+    return {
+      label: 'Incomplete',
+      action: `${missing} ${missing === 1 ? 'check' : 'checks'} could not run, review by hand`,
+    };
+  }
+  return { label: BAND_LABEL[risk.band], action: BAND_ACTION[risk.band] };
+}

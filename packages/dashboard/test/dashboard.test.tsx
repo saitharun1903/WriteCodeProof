@@ -20,6 +20,7 @@ function summary(overrides: Partial<RunSummary> = {}): RunSummary {
     riskScore: 6,
     riskBand: 'medium',
     why: 'Why 6: 2 unexplained behaviour changes (+6)',
+    incomplete: false,
     durationMs: 154_000,
     createdAt: minutesAgo(3),
     finishedAt: minutesAgo(1),
@@ -234,6 +235,46 @@ describe('run page', () => {
     expect(
       screen.getByText('Dropped 6 generated tests that also failed on the old code.'),
     ).toBeTruthy();
+  });
+
+  it('never presents an incomplete run as Low risk', async () => {
+    serve({
+      [`/api/runs/${id}`]: run({
+        riskScore: 0,
+        riskBand: 'low',
+        incomplete: true,
+        findings: [],
+        checks: [
+          {
+            check: 'security',
+            status: 'error',
+            summary: 'Could not run: Lost connection to Docker',
+            stats: {},
+            notes: [],
+            durationMs: 1,
+            findingCount: 0,
+          },
+          {
+            check: 'existing_tests',
+            status: 'passed',
+            summary: '4 run, 4 pass',
+            stats: {},
+            notes: [],
+            durationMs: 1,
+            findingCount: 0,
+          },
+        ],
+      }),
+      '/api/meta': meta,
+    });
+    open(`/runs/${id}`);
+    expect(await screen.findByText('Incomplete')).toBeTruthy();
+    expect(screen.queryByText('Low')).toBeNull();
+    expect(screen.getByText('1 check could not run, review by hand')).toBeTruthy();
+    expect(
+      screen.getByText('Some checks did not finish, so this score only covers what ran.'),
+    ).toBeTruthy();
+    expect(screen.getAllByText(/Lost connection to Docker/).length).toBeGreaterThan(0);
   });
 
   it('explains a run that could not finish', async () => {

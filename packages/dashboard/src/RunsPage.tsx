@@ -116,7 +116,11 @@ export function RunsPage() {
               {data.items.map((run) => (
                 <tr key={run.id}>
                   <td>
-                    <RiskBadge score={run.riskScore} band={run.riskBand} />
+                    <RiskBadge
+                      score={run.riskScore}
+                      band={run.riskBand}
+                      incomplete={run.incomplete}
+                    />
                   </td>
                   <td>
                     <Link to={`/runs/${run.id}`} className="run-link">

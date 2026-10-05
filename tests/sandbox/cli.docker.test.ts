@@ -131,6 +131,25 @@ ${result.stdout.slice(0, 500)}`,
     expect(result.stdout).not.toContain(token);
   });
 
+  it('an unreachable model makes the run incomplete: exits 3 and says why', async () => {
+    const repo = createExampleRepo('py-sample', join(root, 'py-nomodel'));
+    // Ollama "down": nothing listens on this port.
+    const result = await runWith(
+      { OLLAMA_URL: 'http://127.0.0.1:9', LLM_PROVIDER: 'ollama' },
+      'check',
+      repo,
+      '--json',
+      '--quiet',
+    );
+    expect(result.code).toBe(3);
+    const report = JSON.parse(result.stdout);
+    expect(report.risk.incompleteChecks).toEqual(['generated_tests']);
+    const generated = report.checks.find((c: { check: string }) => c.check === 'generated_tests');
+    expect(generated.summary).toBe(
+      'Could not run: Cannot reach Ollama at http://127.0.0.1:9. Is Ollama running?',
+    );
+  });
+
   it('a folder that is not a git repo is a tool error: exits 3', async () => {
     const plain = mkdtempSync(join(root, 'plain-'));
     const result = await run('check', plain, '--no-llm');

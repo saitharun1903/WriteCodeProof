@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sign } from '@octokit/webhooks-methods';
 import { afterAll, describe, expect, it } from 'vitest';
-import type { WebhookDeps } from '@writecode-proof/github';
+import { RunQueue, type WebhookDeps } from '@writecode-proof/github';
 import { buildServer } from '../src/server.js';
 
 describe('API without a database or GitHub App', () => {
@@ -148,4 +148,110 @@ describe('serving the dashboard', () => {
     const res = await app.inject({ method: 'GET', url: '/api/meta' });
     expect(res.json()).toMatchObject({ githubWebUrl: 'https://github.com' });
   });
+});
+
+describe('protection', () => {
+  it('rate-limits clients but never /health', async () => {
+    const app = buildServer({ logLevel: 'silent', rateLimitPerMinute: 2 });
+    try {
+      const codes = [];
+      for (let i = 0; i < 3; i++)
+        codes.push((await app.inject({ method: 'GET', url: '/api/meta' })).statusCode);
+      expect(codes).toEqual([200, 200, 429]);
+      for (let i = 0; i < 5; i++) {
+        expect((await app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(200);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
+  const failingDb = (error: Error) =>
+    ({
+      db: {
+        select: () => {
+          throw error;
+        },
+      },
+      migrate: async () => undefined,
+      ping: async () => undefined,
+      close: async () => undefined,
+    }) as never;
+
+  it('answers 503 when the database is down, without internals', async () => {
+    const down = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:5433'), {
+      code: 'ECONNREFUSED',
+    });
+    const app = buildServer({ logLevel: 'silent', database: failingDb(down) });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/runs' });
+      expect(res.statusCode).toBe(503);
+      expect(res.body).not.toContain('5433');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('answers a plain 500 for unexpected errors, never the SQL', async () => {
+    const app = buildServer({
+      logLevel: 'silent',
+      database: failingDb(new Error('relation "runs" does not exist')),
+    });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/runs' });
+      expect(res.statusCode).toBe(500);
+      expect(res.json()).toEqual({ error: 'Something went wrong on the server.' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it(
+    'answers 503 to GitHub when the queue (Redis) is down, so it can redeliver',
+    { timeout: 20_000 },
+    async () => {
+      const secret = 'shh';
+      // A real queue client pointed at a port where nothing listens.
+      const queue = new RunQueue('redis://127.0.0.1:1');
+      const app = buildServer({
+        logLevel: 'silent',
+        webhook: {
+          secret,
+          enqueue: (run) => queue.enqueue(run),
+          githubFor: async () => ({
+            cloneToken: async () => null,
+            createCheckRun: async () => 1,
+            startCheckRun: async () => undefined,
+            completeCheckRun: async () => undefined,
+            upsertComment: async () => 'created',
+          }),
+          store: null,
+        },
+      });
+      try {
+        const body = JSON.stringify({
+          action: 'opened',
+          installation: { id: 1 },
+          repository: { name: 'r', full_name: 'o/r', owner: { login: 'o' } },
+          pull_request: { number: 3, base: { sha: 'b'.repeat(40) }, head: { sha: 'h'.repeat(40) } },
+        });
+        const res = await app.inject({
+          method: 'POST',
+          url: '/webhook',
+          headers: {
+            'content-type': 'application/json',
+            'x-github-event': 'pull_request',
+            'x-hub-signature-256': await sign(secret, body),
+          },
+          payload: body,
+        });
+        expect(res.statusCode).toBe(503);
+        // The server is still up and serving.
+        expect((await app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(200);
+      } finally {
+        await app.close();
+        await queue.close();
+      }
+    },
+  );
 });

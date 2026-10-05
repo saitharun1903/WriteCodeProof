@@ -1,9 +1,8 @@
 import {
-  BAND_ACTION,
-  BAND_LABEL,
   CHECK_LABEL,
   formatDuration,
   formatScore,
+  riskHeadline,
   shortId,
   STATUS_ICON,
 } from '../labels.js';
@@ -24,8 +23,22 @@ export function escapeMarkdown(text: string): string {
 }
 
 function heading({ risk }: Report): string {
-  const band = BAND_LABEL[risk.band];
-  return `## ${PRODUCT} · Risk ${formatScore(risk.score)}/10 · ${band} — ${BAND_ACTION[risk.band]}`;
+  const { label, action } = riskHeadline(risk);
+  return `## ${PRODUCT} · Risk ${formatScore(risk.score)}/10 · ${label} — ${action}`;
+}
+
+/** Says plainly which checks did not run and why, under the heading. */
+function incompleteNotice({ run, risk }: Report): string[] {
+  if (risk.incompleteChecks.length === 0) return [];
+  const lines = run.checks
+    .filter((c) => risk.incompleteChecks.includes(c.check))
+    .map((c) => `> - ${CHECK_LABEL[c.check]}: ${escapeMarkdown(c.summary)}`);
+  return [
+    '> [!WARNING]',
+    '> Some checks did not finish, so this score only covers what ran.',
+    ...lines,
+    '',
+  ];
 }
 
 function findingLine(f: Finding): string {
@@ -67,6 +80,7 @@ export function renderMarkdown(report: Report): string {
     COMMENT_MARKER,
     heading(report),
     '',
+    ...incompleteNotice(report),
     changeSummary(run),
     '',
     '| Check | Result |',

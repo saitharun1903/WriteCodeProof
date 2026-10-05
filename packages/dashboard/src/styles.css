@@ -295,6 +295,11 @@ table {
   color: var(--blocked);
   background: var(--blocked-bg);
 }
+.risk--incomplete {
+  color: var(--info);
+  background: var(--info-bg);
+  outline: 1px dashed var(--muted);
+}
 .risk--none {
   color: var(--muted);
 }
@@ -518,6 +523,14 @@ table {
 .severity--info {
   color: var(--info);
   background: var(--info-bg);
+}
+.unfinished {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 14px;
+}
+.risk-panel + .message {
+  margin-top: 12px;
 }
 .notes li {
   font-size: 14px;

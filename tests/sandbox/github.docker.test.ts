@@ -21,76 +21,17 @@ import {
   sandboxSettingsFromEnv,
 } from '@writecode-proof/core';
 import { connectDb, getRun, type DbHandle } from '@writecode-proof/db';
-import {
-  dbRunStore,
-  RunQueue,
-  type CheckConclusion,
-  type CheckOutput,
-  type ProcessOutcome,
-  type PullRequestGitHub,
-  type QueuedRun,
-} from '@writecode-proof/github';
+import { dbRunStore, RunQueue, type ProcessOutcome, type QueuedRun } from '@writecode-proof/github';
 import { startWorker } from '@writecode-proof/worker';
 import { buildServer } from '../../packages/api/src/server.js';
 import { createExampleRepo, PR_BRANCH } from '../../scripts/example-repo.mjs';
+import { FakeGitHub, git } from './helpers.js';
 
 const env = loadEnvFromFile();
 const SECRET = 'phase-6-secret';
 const PREFIX = `wcp-test-${randomUUID().slice(0, 8)}`;
 const TEST_DB = `wcp_test_${randomUUID().slice(0, 8)}`;
 const root = mkdtempSync(join(tmpdir(), 'wcp-gh-'));
-
-function git(cwd: string, ...args: string[]): string {
-  return execFileSync('git', ['-c', 'commit.gpgsign=false', '-c', 'core.autocrlf=false', ...args], {
-    cwd,
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: 'T',
-      GIT_AUTHOR_EMAIL: 't@example.invalid',
-      GIT_COMMITTER_NAME: 'T',
-      GIT_COMMITTER_EMAIL: 't@example.invalid',
-    },
-  }).trim();
-}
-
-/** Records everything the worker does on "GitHub"; comments keep their ids. */
-class FakeGitHub implements PullRequestGitHub {
-  events: string[] = [];
-  comments = new Map<number, string>();
-  checks = new Map<number, { conclusion: CheckConclusion | null; output: CheckOutput | null }>();
-  private nextId = 1;
-
-  async cloneToken() {
-    return null;
-  }
-  async createCheckRun(_sha: string, status: 'queued' | 'in_progress') {
-    const id = this.nextId++;
-    this.checks.set(id, { conclusion: null, output: null });
-    this.events.push(`check ${id} ${status}`);
-    return id;
-  }
-  async startCheckRun(id: number) {
-    this.events.push(`check ${id} in_progress`);
-  }
-  async completeCheckRun(id: number, conclusion: CheckConclusion, output: CheckOutput) {
-    this.checks.set(id, { conclusion, output });
-    this.events.push(`check ${id} ${conclusion}`);
-  }
-  async upsertComment(body: string): Promise<'created' | 'updated'> {
-    for (const [id, existing] of this.comments) {
-      if (existing.includes(COMMENT_MARKER)) {
-        this.comments.set(id, body);
-        this.events.push(`comment ${id} updated`);
-        return 'updated';
-      }
-    }
-    const id = 1000 + this.comments.size;
-    this.comments.set(id, body);
-    this.events.push(`comment ${id} created`);
-    return 'created';
-  }
-}
 
 let database: DbHandle;
 let queue: RunQueue;

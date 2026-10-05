@@ -29,7 +29,12 @@ export type * from './types.js';
 export { readPackageVersion } from './version.js';
 export { RunBudget } from './sandbox/budget.js';
 export { BudgetExceededError, SandboxError } from './sandbox/errors.js';
-export { Sandbox, waitForExit } from './sandbox/runner.js';
+export {
+  explainDockerError,
+  isDockerConnectionError,
+  Sandbox,
+  waitForExit,
+} from './sandbox/runner.js';
 export type { StepOptions, StepResult } from './sandbox/runner.js';
 export { imageForLanguage, parseDockerSize, sandboxSettingsFromEnv } from './sandbox/settings.js';
 export type { SandboxSettings } from './sandbox/settings.js';
@@ -42,7 +47,12 @@ export {
   WORK_DIR,
 } from './sandbox/spec.js';
 export type { StepSpec, VolumeMount } from './sandbox/spec.js';
-export { assertInsideRoot, createWorkdir, removeWorkdir } from './sandbox/workdir.js';
+export {
+  assertInsideRoot,
+  createWorkdir,
+  removeStaleFolders,
+  removeWorkdir,
+} from './sandbox/workdir.js';
 export {
   behaviourDiffCheck,
   edgeCaseInputs,
@@ -72,6 +82,8 @@ export { jsImportCandidates, pyImportCandidates } from './checks/testFiles.js';
 export { parseJestJson, parseJUnit } from './checks/testResults.js';
 export type { TestCase } from './checks/testResults.js';
 export { CachedProvider, defaultCacheDir } from './llm/cache.js';
+export { postJson } from './llm/http.js';
+export type { PostOptions } from './llm/http.js';
 export { completeJson, extractCode, extractJson } from './llm/json.js';
 export {
   AnthropicProvider,
@@ -106,6 +118,7 @@ export {
   CHECK_ORDER,
   formatDuration,
   formatScore,
+  riskHeadline,
   SEVERITY_ORDER,
   shortId,
   STATUS_ICON,

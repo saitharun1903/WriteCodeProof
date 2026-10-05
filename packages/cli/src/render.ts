@@ -1,12 +1,11 @@
 import pc from 'picocolors';
 import {
-  BAND_ACTION,
-  BAND_LABEL,
   CHECK_LABEL,
   changeSummary,
   formatDuration,
   formatScore,
   orderedChecks,
+  riskHeadline,
   shortId,
   type CheckStatus,
   type Finding,
@@ -72,13 +71,18 @@ function finding(f: Finding): string[] {
 /** Terminal version of the Proof Pack: same content as the PR comment, in colour. */
 export function renderTerminal(report: Report, footerExtra = ''): string {
   const { run, risk } = report;
-  const color = BAND_COLOR[risk.band];
+  const { label, action } = riskHeadline(risk);
+  const incomplete = risk.incompleteChecks.length > 0 && risk.band !== 'blocked';
+  const color = incomplete ? pc.magenta : BAND_COLOR[risk.band];
   const checks = orderedChecks(run);
   const out = [
     '',
     pc.bold(
-      `WriteCode Proof · ${color(`Risk ${formatScore(risk.score)}/10 · ${BAND_LABEL[risk.band]}`)} — ${BAND_ACTION[risk.band]}`,
+      `WriteCode Proof · ${color(`Risk ${formatScore(risk.score)}/10 · ${label}`)} — ${action}`,
     ),
+    ...(incomplete
+      ? [pc.magenta('Some checks did not finish, so this score only covers what ran.')]
+      : []),
     changeSummary(run),
     '',
     ...checks.map(

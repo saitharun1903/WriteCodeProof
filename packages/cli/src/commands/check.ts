@@ -112,5 +112,5 @@ export async function checkCommand(
       : '';
     process.stdout.write(renderTerminal(report, model));
   }
-  return exitCodeFor(risk.band);
+  return exitCodeFor(risk);
 }

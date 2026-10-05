@@ -18,6 +18,8 @@
   "dependencies": {
     "@octokit/app": "^16.1.4",
     "@octokit/core": "^7.0.8",
+    "@octokit/plugin-retry": "^8.1.1",
+    "@octokit/plugin-throttling": "^11.0.5",
     "@octokit/webhooks-methods": "^6.0.0",
     "@writecode-proof/core": "0.1.0",
     "@writecode-proof/db": "0.1.0",

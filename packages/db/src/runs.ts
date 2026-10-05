@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, lt } from 'drizzle-orm';
 import type { CheckResult, Finding, Risk } from '@writecode-proof/core';
 import type { Db } from './client.js';
 import { findings, installations, repos, runs } from './schema.js';
@@ -90,6 +90,20 @@ export async function createRun(db: Db, run: NewRun): Promise<void> {
   });
 }
 
+/**
+ * Mark runs that have been "running" longer than `olderThanMs` as errors:
+ * the process running them stopped. Returns how many were marked.
+ */
+export async function markStaleRuns(db: Db, olderThanMs: number, error: string): Promise<number> {
+  const cutoff = new Date(Date.now() - olderThanMs);
+  const rows = await db
+    .update(runs)
+    .set({ status: 'error', error, finishedAt: new Date() })
+    .where(and(eq(runs.status, 'running'), lt(runs.createdAt, cutoff)))
+    .returning({ id: runs.id });
+  return rows.length;
+}
+
 export async function setRunStatus(db: Db, id: string, status: RunStatus): Promise<void> {
   await db.update(runs).set({ status }).where(eq(runs.id, id));
 }
@@ -121,6 +135,7 @@ export async function finishRun(db: Db, id: string, outcome: FinishedRun | Faile
         riskScore: risk.score,
         riskBand: risk.band,
         why: risk.why,
+        incomplete: risk.incompleteChecks.length > 0,
         checksJson: stored,
         durationMs: outcome.durationMs,
         finishedAt: new Date(),
@@ -152,6 +167,7 @@ export interface RunListItem {
   riskScore: number | null;
   riskBand: string | null;
   why: string | null;
+  incomplete: boolean;
   durationMs: number | null;
   createdAt: Date;
   finishedAt: Date | null;
@@ -169,6 +185,7 @@ const listColumns = {
   riskScore: runs.riskScore,
   riskBand: runs.riskBand,
   why: runs.why,
+  incomplete: runs.incomplete,
   durationMs: runs.durationMs,
   createdAt: runs.createdAt,
   finishedAt: runs.finishedAt,

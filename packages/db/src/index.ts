@@ -5,6 +5,7 @@ export {
   finishRun,
   getRun,
   listRuns,
+  markStaleRuns,
   setRepoConfig,
   setRunStatus,
   upsertInstallation,

@@ -312,6 +312,10 @@ export interface DraftedTests {
   /** Targets with their test file contents. */
   drafts: (Target & { code: string })[];
   notes: string[];
+  /** Set when the model stopped answering (down, wrong model, auth): why. */
+  modelError: string | null;
+  /** Functions that were to get tests. */
+  planned: number;
 }
 
 /**
@@ -324,13 +328,14 @@ export async function draftGeneratedTests(
 ): Promise<DraftedTests> {
   const notes: string[] = [];
   const { llm } = options;
-  if (!llm) return { drafts: [], notes };
+  if (!llm) return { drafts: [], notes, modelError: null, planned: 0 };
   const targets = pickTargets(
     ctx,
     options.maxFunctions ?? CHECK_DEFAULTS.GENERATED_TESTS_MAX_FUNCTIONS,
     notes,
   );
   const drafts: DraftedTests['drafts'] = [];
+  let modelError: string | null = null;
   for (const target of targets) {
     if (ctx.budget.exhausted) {
       notes.push(`Skipped ${target.fn.qualifiedName}: time budget used up.`);
@@ -344,10 +349,13 @@ export async function draftGeneratedTests(
         `${target.fn.qualifiedName}: could not generate tests (${(error as Error).message}).`,
       );
       // The model is unreachable or misconfigured: no point asking again for each function.
-      if (error instanceof LlmError && !(error instanceof LlmOutputError)) break;
+      if (error instanceof LlmError && !(error instanceof LlmOutputError)) {
+        modelError = (error as Error).message;
+        break;
+      }
     }
   }
-  return { drafts, notes };
+  return { drafts, notes, modelError, planned: targets.length };
 }
 
 /** Spec 5b: LLM-written tests per changed function, filtered by mutation-lite. */
@@ -362,8 +370,14 @@ export function generatedTestsCheck(
       result.summary = 'Skipped (generation turned off)';
       return;
     }
-    const { drafts, notes } = await (options.drafted ?? draftGeneratedTests(ctx, options));
+    const { drafts, notes, modelError, planned } = await (options.drafted ??
+      draftGeneratedTests(ctx, options));
     result.notes.push(...notes);
+    if (modelError && drafts.length === 0) {
+      result.status = 'error';
+      result.summary = `Could not run: ${modelError}`;
+      return;
+    }
     if (drafts.length === 0) {
       const anyTarget = ctx.changes.changedFunctions.some((f) => f.status !== 'deleted');
       result.status = anyTarget ? 'error' : 'skipped';
@@ -480,6 +494,11 @@ export function generatedTestsCheck(
       result.summary = `${head} — ${confirmed[0]!.title}`;
     } else {
       result.summary = findings.length ? `${head}, ${findings.length} unconfirmed` : head;
+    }
+    if (modelError) {
+      // Some functions never got tests: say so and count the run as incomplete.
+      result.status = 'error';
+      result.summary = `${head}; the model stopped answering after ${drafts.length} of ${planned} functions (${modelError})`;
     }
   });
 }

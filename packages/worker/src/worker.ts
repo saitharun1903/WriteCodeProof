@@ -3,6 +3,7 @@ import type { LlmProvider, Sandbox } from '@writecode-proof/core';
 import {
   processPullRequest,
   QUEUE_NAME,
+  reportFailedRun,
   redisConnection,
   type ProcessOutcome,
   type PullRequestGitHub,
@@ -30,7 +31,7 @@ export interface WorkerOptions {
 
 /** BullMQ consumer: one pull request push per job (spec section 5, GitHub side). */
 export function startWorker(options: WorkerOptions): Worker<QueuedRun, ProcessOutcome> {
-  return new Worker<QueuedRun, ProcessOutcome>(
+  const worker = new Worker<QueuedRun, ProcessOutcome>(
     QUEUE_NAME,
     async (job) => {
       const run = job.data;
@@ -57,4 +58,46 @@ export function startWorker(options: WorkerOptions): Worker<QueuedRun, ProcessOu
       concurrency: options.concurrency,
     },
   );
+
+  // Redis going away must not crash the worker; BullMQ reconnects by itself.
+  worker.on('error', (error) => {
+    (options.log ?? (() => undefined))('queue connection problem', { error: error.message });
+  });
+
+  // processPullRequest reports its own failures. A job only fails here when it
+  // died outside it, e.g. the worker crashed and BullMQ gave up on the job.
+  worker.on('failed', (job, error) => {
+    if (!job) return;
+    void reportAbandoned(job.data, job.timestamp, error, options);
+  });
+  return worker;
+}
+
+async function reportAbandoned(
+  run: QueuedRun,
+  queuedAt: number,
+  error: Error,
+  options: WorkerOptions,
+): Promise<void> {
+  const log = options.log ?? (() => undefined);
+  log('run abandoned', { runId: run.runId, error: error.message });
+  try {
+    const github = await options.githubFor(run.installationId, {
+      owner: run.owner,
+      repo: run.repo,
+      prNumber: run.prNumber,
+    });
+    await reportFailedRun(
+      run,
+      {
+        github,
+        store: options.store,
+        checkRunId: run.checkRunId,
+        durationMs: Date.now() - queuedAt,
+      },
+      `The worker stopped while checking this push (${error.message}).`,
+    );
+  } catch (reportError) {
+    log('could not report the abandoned run', { error: (reportError as Error).message });
+  }
 }

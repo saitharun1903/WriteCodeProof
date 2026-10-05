@@ -6,6 +6,30 @@ export const QUEUE_NAME = 'writecode-proof-runs';
 const JOB_NAME = 'pull_request';
 /** Finished jobs kept in Redis for inspection. */
 const KEEP_FINISHED = 200;
+/**
+ * Redis commands wait for a reconnect (BullMQ needs that), so a call while
+ * Redis is down would hang; give up after this long instead.
+ */
+const QUEUE_CALL_TIMEOUT_MS = 5_000;
+
+export class QueueUnavailableError extends Error {
+  constructor(cause?: unknown) {
+    super('The run queue (Redis) is not reachable', { cause });
+    this.name = 'QueueUnavailableError';
+  }
+}
+
+function bounded<T>(promise: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new QueueUnavailableError()), QUEUE_CALL_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout])
+    .catch((error: unknown) => {
+      throw error instanceof QueueUnavailableError ? error : new QueueUnavailableError(error);
+    })
+    .finally(() => clearTimeout(timer));
+}
 
 export interface QueuedRun extends PullRequestJob {
   /** `owner/repo#12`: one live run per pull request (spec section 12). */
@@ -39,17 +63,32 @@ export class RunQueue {
   private readonly redis: Redis;
   private readonly latestKey: string;
 
-  constructor(redisUrl: string, prefix?: string) {
+  /**
+   * `onError`: Redis connection problems. They are reported, not thrown: an
+   * unhandled 'error' event would crash the process, and the clients
+   * reconnect by themselves once Redis is back.
+   */
+  constructor(
+    redisUrl: string,
+    prefix?: string,
+    onError: (error: Error) => void = () => undefined,
+  ) {
     this.queue = new Queue<QueuedRun>(QUEUE_NAME, {
       connection: redisConnection(redisUrl),
       ...(prefix ? { prefix } : {}),
     });
+    this.queue.on('error', onError);
     this.redis = new Redis(redisUrl, { maxRetriesPerRequest: null, lazyConnect: true });
+    this.redis.on('error', onError);
     this.latestKey = `${prefix ?? 'bull'}:${QUEUE_NAME}:latest-head`;
   }
 
-  /** Enqueue a run; returns the waiting runs it replaced. */
-  async enqueue(run: Omit<QueuedRun, 'key'>): Promise<QueuedRun[]> {
+  /** Enqueue a run; returns the waiting runs it replaced. Throws QueueUnavailableError. */
+  enqueue(run: Omit<QueuedRun, 'key'>): Promise<QueuedRun[]> {
+    return bounded(this.enqueueNow(run));
+  }
+
+  private async enqueueNow(run: Omit<QueuedRun, 'key'>): Promise<QueuedRun[]> {
     const key = prKey(run.fullName, run.prNumber);
     await this.redis.hset(this.latestKey, key, run.headSha);
 
@@ -82,7 +121,7 @@ export class RunQueue {
   }
 
   async ping(): Promise<void> {
-    await this.redis.ping();
+    await bounded(this.redis.ping());
   }
 
   async close(): Promise<void> {

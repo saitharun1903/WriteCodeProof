@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, realpath, rm, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { SandboxError } from './errors.js';
 
@@ -26,6 +26,25 @@ export async function assertInsideRoot(root: string, dir: string): Promise<strin
     throw new SandboxError(`Refusing to mount ${dir}: it is not inside ${root}`);
   }
   return realDir;
+}
+
+/**
+ * Remove folders under `root` last changed more than `olderThanMs` ago:
+ * run folders or clones left behind by a crashed process.
+ */
+export async function removeStaleFolders(root: string, olderThanMs: number): Promise<number> {
+  const cutoff = Date.now() - olderThanMs;
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  let removed = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const path = join(root, entry.name);
+    const info = await stat(path).catch(() => null);
+    if (!info || info.mtimeMs >= cutoff) continue;
+    await rm(path, { recursive: true, force: true, maxRetries: 3 }).catch(() => undefined);
+    removed++;
+  }
+  return removed;
 }
 
 export async function removeWorkdir(root: string, dir: string): Promise<void> {

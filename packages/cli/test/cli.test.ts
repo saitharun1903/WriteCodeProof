@@ -18,7 +18,15 @@ describe('exit codes (spec section 14)', () => {
     ['medium', EXIT.ok],
     ['high', EXIT.high],
     ['blocked', EXIT.blocked],
-  ] as const)('%s → %i', (band, code) => expect(exitCodeFor(band)).toBe(code));
+  ] as const)('%s → %i', (band, code) =>
+    expect(exitCodeFor({ band, incompleteChecks: [] })).toBe(code),
+  );
+
+  it('fails as a tool error when checks did not run, unless already blocked', () => {
+    expect(exitCodeFor({ band: 'low', incompleteChecks: ['security'] })).toBe(EXIT.toolError);
+    expect(exitCodeFor({ band: 'high', incompleteChecks: ['security'] })).toBe(EXIT.toolError);
+    expect(exitCodeFor({ band: 'blocked', incompleteChecks: ['security'] })).toBe(EXIT.blocked);
+  });
 
   it('uses the numbers from the spec', () => {
     expect(EXIT).toEqual({ ok: 0, high: 1, blocked: 2, toolError: 3 });

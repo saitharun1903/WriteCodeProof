@@ -1,4 +1,4 @@
-import { formatScore } from '../labels.js';
+import { CHECK_LABEL, formatScore } from '../labels.js';
 import { detectLanguage } from '../parse/languages.js';
 import type { ChangeSet, CheckName, CheckResult, Finding } from '../types.js';
 import { MAX_SCORE, WEIGHTS, type BlockReason, type Policy } from './weights.js';
@@ -20,6 +20,11 @@ export interface Risk {
   contributions: Contribution[];
   /** "Why 6: 1 unexplained behaviour change (+3), AI-authored (+1)" */
   why: string;
+  /**
+   * Checks that could not run. When any did, the score only covers what ran
+   * and may be too low, so a Low score must not be read as safe.
+   */
+  incompleteChecks: CheckName[];
 }
 
 export interface RiskInput {
@@ -119,6 +124,7 @@ export function scoreRisk(input: RiskInput, policy: Policy): Risk {
     );
     reasons.unshift(`${what.join(' and ')} (blocks merge)`);
   }
+  const incompleteChecks = input.checks.filter((c) => c.status === 'error').map((c) => c.check);
   const why = `Why ${formatScore(score)}: ${reasons.length ? reasons.join(', ') : 'no risk signals'}`;
 
   return {
@@ -127,7 +133,10 @@ export function scoreRisk(input: RiskInput, policy: Policy): Risk {
     blocked,
     blockReasons: [...blockReasons],
     contributions: parts,
-    why,
+    why: incompleteChecks.length
+      ? `${why}; incomplete: ${incompleteChecks.map((c) => CHECK_LABEL[c].toLowerCase()).join(', ')} could not run`
+      : why,
+    incompleteChecks,
   };
 }
 

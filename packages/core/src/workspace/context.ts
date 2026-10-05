@@ -159,7 +159,7 @@ async function installDeps(ctx: RunContext, side: Side, toolchain: 'node' | 'pyt
     return;
   }
 
-  await ctx.sandbox.docker.createVolume({ Name: volume, Labels: { [SANDBOX_LABEL]: 'deps' } });
+  await ctx.sandbox.ensureVolume(volume, { [SANDBOX_LABEL]: 'deps' });
   const result = await ctx.sandbox.run({
     image,
     command: ['sh', '-c', installScript(side, toolchain, projects)],

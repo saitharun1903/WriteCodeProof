@@ -288,3 +288,52 @@ describe('reports', () => {
     expect(formatDuration(192_000)).toBe('3m 12s');
   });
 });
+
+describe('incomplete runs', () => {
+  const broken = (check: CheckName) =>
+    result(check, [], { status: 'error', summary: 'Could not run: Lost connection to Docker' });
+
+  it('records which checks did not run and says so in the reason', () => {
+    const risk = scoreRisk(
+      {
+        ...input([]),
+        checks: [result('existing_tests'), broken('security'), broken('behaviour_diff')],
+      },
+      DEFAULT_POLICY,
+    );
+    expect(risk.incompleteChecks).toEqual(['security', 'behaviour_diff']);
+    expect(risk.band).toBe('low');
+    expect(risk.why).toBe(
+      'Why 0: no risk signals; incomplete: security, behaviour diff could not run',
+    );
+  });
+
+  it('is shown as Incomplete in the PR comment, never as Low', () => {
+    const checks = [result('existing_tests'), broken('security')];
+    const run: ProofRun = {
+      runId: 'r'.repeat(36),
+      changes: { ...({} as ChangeSet), changedFunctions: [], files: [] },
+      checks,
+      notes: [],
+      durationMs: 1000,
+    };
+    const risk = scoreRisk({ ...input([]), checks }, DEFAULT_POLICY);
+    const md = renderMarkdown({ run, risk });
+    expect(md).toContain(
+      '## WriteCode Proof · Risk 0/10 · Incomplete — 1 check could not run, review by hand',
+    );
+    expect(md).toContain('> [!WARNING]');
+    expect(md).toContain('> - Security: Could not run: Lost connection to Docker');
+    expect(md).not.toContain('auto-approve');
+  });
+
+  it('keeps Blocked when a secret was found before the run broke', () => {
+    const leak = finding('security', 'critical', { detail: { tool: 'gitleaks' } });
+    const risk = scoreRisk(
+      { ...input([]), checks: [result('security', [leak]), broken('behaviour_diff')] },
+      DEFAULT_POLICY,
+    );
+    expect(risk.band).toBe('blocked');
+    expect(risk.incompleteChecks).toEqual(['behaviour_diff']);
+  });
+});

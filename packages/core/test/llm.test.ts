@@ -15,6 +15,7 @@ import {
   loadEnv,
   OllamaProvider,
   OpenAiCompatibleProvider,
+  postJson,
   type CompleteOptions,
   type LlmProvider,
 } from '../src/index.js';
@@ -183,5 +184,59 @@ describe('providers', () => {
       'anthropic',
     );
     expect(createLlmProvider(loadEnv({}), 'ollama').model).toBe(loadEnv({}).LLM_MODEL);
+  });
+});
+
+describe('rate limits', () => {
+  it('retries once after a 429, waiting as long as the API asks', async () => {
+    const replies = [
+      new Response('{"error":"slow down"}', { status: 429, headers: { 'retry-after': '3' } }),
+      new Response(JSON.stringify({ message: { content: 'ok' } }), { status: 200 }),
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => replies.shift()!),
+    );
+    const waits: number[] = [];
+    const reply = await postJson<{ message: { content: string } }>(
+      'Ollama',
+      'http://x/api',
+      {},
+      {
+        timeoutMs: 1000,
+        sleep: async (ms) => void waits.push(ms),
+      },
+    );
+    expect(reply.message.content).toBe('ok');
+    expect(waits).toEqual([3000]);
+  });
+
+  it('gives up after the retry with the API message', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{"error":{"message":"Overloaded"}}', { status: 529 })),
+    );
+    await expect(
+      postJson('Anthropic API', 'http://x', {}, { timeoutMs: 1000, sleep: async () => undefined }),
+    ).rejects.toThrow('Anthropic API returned 529: Overloaded');
+  });
+
+  it('caps a very long Retry-After', async () => {
+    const replies = [
+      new Response('', { status: 503, headers: { 'retry-after': '3600' } }),
+      new Response('{}', { status: 200 }),
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => replies.shift()!),
+    );
+    const waits: number[] = [];
+    await postJson(
+      'API',
+      'http://x',
+      {},
+      { timeoutMs: 1000, sleep: async (ms) => void waits.push(ms) },
+    );
+    expect(waits[0]).toBeLessThanOrEqual(30_000);
   });
 });

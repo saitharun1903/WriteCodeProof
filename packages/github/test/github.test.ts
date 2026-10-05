@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { COMMENT_MARKER } from '@writecode-proof/core';
 import {
   checkConclusion,
+  forgivingStore,
   githubWebUrl,
   handleWebhook,
   isAiAuthored,
@@ -320,5 +321,68 @@ describe('githubWebUrl', () => {
   it('maps API addresses to web addresses', () => {
     expect(githubWebUrl('https://api.github.com')).toBe('https://github.com');
     expect(githubWebUrl('https://ghe.example.com/api/v3')).toBe('https://ghe.example.com');
+  });
+});
+
+describe('check conclusion for incomplete runs', () => {
+  it('is neutral, never success, when checks did not run', () => {
+    expect(checkConclusion('low', 'advise', true)).toBe('neutral');
+    expect(checkConclusion('medium', 'enforce', true)).toBe('neutral');
+  });
+  it('still fails a blocked run', () => {
+    expect(checkConclusion('blocked', 'advise', true)).toBe('failure');
+  });
+});
+
+describe('forgivingStore', () => {
+  it('logs store failures instead of throwing them', async () => {
+    const logged: string[] = [];
+    const broken: RunStore = {
+      queued: async () => {
+        throw new Error('db down');
+      },
+      running: async () => {
+        throw new Error('db down');
+      },
+      saveConfig: async () => undefined,
+      finish: async () => {
+        throw new Error('db down');
+      },
+    };
+    const store = forgivingStore(broken, (message) => logged.push(message));
+    await expect(store.running('r')).resolves.toBeUndefined();
+    await expect(
+      store.finish('r', { status: 'error', error: 'x', durationMs: 1 }),
+    ).resolves.toBeUndefined();
+    expect(logged).toEqual([
+      'could not record the run (running)',
+      'could not record the run (finish)',
+    ]);
+  });
+
+  it('lets the webhook queue the run even when recording it fails', async () => {
+    const enqueued: unknown[] = [];
+    const rawBody = JSON.stringify(prPayload());
+    const res = await handleWebhook(
+      { event: 'pull_request', deliveryId: 'd', rawBody, signature: await sign(SECRET, rawBody) },
+      {
+        secret: SECRET,
+        enqueue: async (run) => {
+          enqueued.push(run);
+          return [];
+        },
+        githubFor: async () => recordingGitHub().github,
+        store: {
+          queued: async () => {
+            throw new Error('db down');
+          },
+          running: async () => undefined,
+          saveConfig: async () => undefined,
+          finish: async () => undefined,
+        },
+      },
+    );
+    expect(res.status).toBe(202);
+    expect(enqueued).toHaveLength(1);
   });
 });

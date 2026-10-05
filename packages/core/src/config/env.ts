@@ -53,6 +53,14 @@ export const envSchema = z
       blankToUndefined,
       z.coerce.number().int().min(1).max(65535).default(DEFAULTS.PORT),
     ),
+    RATE_LIMIT_PER_MINUTE: positiveInt(DEFAULTS.RATE_LIMIT_PER_MINUTE),
+    TRUST_PROXY: z.preprocess(
+      blankToUndefined,
+      z
+        .enum(['true', 'false'])
+        .transform((v) => v === 'true')
+        .default(DEFAULTS.TRUST_PROXY),
+    ),
     DASHBOARD_PORT: z.preprocess(
       blankToUndefined,
       z.coerce.number().int().min(1).max(65535).default(DEFAULTS.DASHBOARD_PORT),

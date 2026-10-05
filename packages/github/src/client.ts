@@ -1,5 +1,7 @@
 import { App } from '@octokit/app';
 import { Octokit } from '@octokit/core';
+import { retry } from '@octokit/plugin-retry';
+import { throttling } from '@octokit/plugin-throttling';
 import { COMMENT_MARKER } from '@writecode-proof/core';
 import { CHECK_NAME, type CheckConclusion } from './conclusion.js';
 import type { GitHubSettings } from './settings.js';
@@ -8,6 +10,18 @@ import type { GitHubSettings } from './settings.js';
 const MAX_OUTPUT_CHARS = 65_000;
 const MAX_TITLE_CHARS = 250;
 const COMMENTS_PER_PAGE = 100;
+/** Retries when GitHub rate-limits a request. */
+const RATE_LIMIT_RETRIES = 2;
+/** Longer waits than this would hold a run past its budget: fail instead. */
+const MAX_RATE_LIMIT_WAIT_S = 60;
+
+/**
+ * Octokit that waits out GitHub rate limits (primary and secondary) and
+ * retries server errors, instead of failing the run on the first 403/429/5xx.
+ */
+const ResilientOctokit = Octokit.plugin(throttling, retry);
+const retryRateLimit = (retryAfter: number, _options: unknown, _octokit: unknown, count: number) =>
+  count < RATE_LIMIT_RETRIES && retryAfter <= MAX_RATE_LIMIT_WAIT_S;
 
 export interface CheckOutput {
   title: string;
@@ -155,7 +169,10 @@ export class GitHubApp {
     this.app = new App({
       appId: settings.appId,
       privateKey: settings.privateKey,
-      Octokit: Octokit.defaults({ baseUrl: settings.apiUrl }),
+      Octokit: ResilientOctokit.defaults({
+        baseUrl: settings.apiUrl,
+        throttle: { onRateLimit: retryRateLimit, onSecondaryRateLimit: retryRateLimit },
+      }),
     });
   }
 

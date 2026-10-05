@@ -1,3 +1,4 @@
+import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -20,6 +21,25 @@ export interface ServerOptions {
   dashboardDir?: string | null;
   /** Base for pull request links on the dashboard, e.g. https://github.com. */
   githubWebUrl?: string | null;
+  /** Requests per minute per client; /health is exempt. Off when not set. */
+  rateLimitPerMinute?: number | null;
+  /** Behind nginx: take the client address from X-Forwarded-For. */
+  trustProxy?: boolean;
+}
+
+/** Errors that mean Postgres or Redis is down, not that the request was wrong. */
+function isUnavailable(error: unknown): boolean {
+  const e = error as { code?: string; message?: string; name?: string } | null;
+  if (!e) return false;
+  return (
+    ['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', '57P01', '57P03'].includes(
+      e.code ?? '',
+    ) ||
+    e.name === 'QueueUnavailableError' ||
+    /connection (terminated|is closed)|timeout exceeded when trying to connect/i.test(
+      e.message ?? '',
+    )
+  );
 }
 
 /** Paths that belong to the API; everything else may be a dashboard page. */
@@ -45,17 +65,64 @@ async function probe(check: (() => Promise<void>) | null | undefined) {
 }
 
 export function buildServer(options: ServerOptions): FastifyInstance {
-  const app = Fastify({ logger: { level: options.logLevel } });
+  const app = Fastify({
+    logger: { level: options.logLevel },
+    trustProxy: options.trustProxy ?? false,
+  });
+
+  if (options.rateLimitPerMinute) {
+    app.register(rateLimit, {
+      max: options.rateLimitPerMinute,
+      timeWindow: '1 minute',
+      // Monitoring polls /health; it must not lock itself out.
+      allowList: (req) => req.url === '/health',
+    });
+  }
+
+  // Never send internals (SQL, stack traces) to the client; log them instead.
+  app.setErrorHandler((error: Error & { statusCode?: number }, req, reply) => {
+    if (error.statusCode && error.statusCode < 500) {
+      return reply.code(error.statusCode).send({ error: error.message });
+    }
+    req.log.error({ err: error }, 'request failed');
+    if (isUnavailable(error)) {
+      return reply
+        .code(503)
+        .send({ error: 'The database or queue is not reachable. Try again shortly.' });
+    }
+    return reply.code(500).send({ error: 'Something went wrong on the server.' });
+  });
   const version = readPackageVersion(import.meta.url);
   const { database, webhook } = options;
 
-  app.get('/health', async () => ({
-    status: 'ok',
-    version,
-    uptimeSeconds: Math.round(process.uptime()),
-    database: await probe(database ? () => database.ping() : null),
-    queue: await probe(options.queuePing),
-  }));
+  // Routes live in plugins registered after the rate limiter: it only applies
+  // to routes added once it has loaded, and plugins load in order.
+  app.register(async (api) => {
+    api.get('/health', async () => ({
+      status: 'ok',
+      version,
+      uptimeSeconds: Math.round(process.uptime()),
+      database: await probe(database ? () => database.ping() : null),
+      queue: await probe(options.queuePing),
+    }));
+
+    api.get('/api/meta', async () => ({ version, githubWebUrl: options.githubWebUrl ?? null }));
+
+    api.get('/api/runs', async (req, reply) => {
+      if (!database) return reply.code(503).send({ error: 'No database configured' });
+      const parsed = listQuery.safeParse(req.query);
+      if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+      return listRuns(database.db, parsed.data);
+    });
+
+    api.get('/api/runs/:id', async (req, reply) => {
+      if (!database) return reply.code(503).send({ error: 'No database configured' });
+      const parsed = runParams.safeParse(req.params);
+      if (!parsed.success) return reply.code(404).send({ error: 'Run not found' });
+      const run = await getRun(database.db, parsed.data.id);
+      return run ?? reply.code(404).send({ error: 'Run not found' });
+    });
+  });
 
   // The signature covers the exact bytes GitHub sent, so this route keeps the raw body.
   app.register(async (scope) => {
@@ -77,23 +144,6 @@ export function buildServer(options: ServerOptions): FastifyInstance {
       );
       return reply.code(result.status).send(result.body);
     });
-  });
-
-  app.get('/api/meta', async () => ({ version, githubWebUrl: options.githubWebUrl ?? null }));
-
-  app.get('/api/runs', async (req, reply) => {
-    if (!database) return reply.code(503).send({ error: 'No database configured' });
-    const parsed = listQuery.safeParse(req.query);
-    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
-    return listRuns(database.db, parsed.data);
-  });
-
-  app.get('/api/runs/:id', async (req, reply) => {
-    if (!database) return reply.code(503).send({ error: 'No database configured' });
-    const parsed = runParams.safeParse(req.params);
-    if (!parsed.success) return reply.code(404).send({ error: 'Run not found' });
-    const run = await getRun(database.db, parsed.data.id);
-    return run ?? reply.code(404).send({ error: 'Run not found' });
   });
 
   if (options.dashboardDir) {

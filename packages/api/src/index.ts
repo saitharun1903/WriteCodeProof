@@ -27,7 +27,11 @@ async function main(): Promise<void> {
   const env = loadEnvFromFile();
   const database = env.DATABASE_URL ? connectDb(env.DATABASE_URL) : null;
   if (database) await database.migrate();
-  const queue = env.REDIS_URL ? new RunQueue(env.REDIS_URL) : null;
+  // Created before the logger exists; problems are logged once the server is up.
+  let logQueueError: (error: Error) => void = () => undefined;
+  const queue = env.REDIS_URL
+    ? new RunQueue(env.REDIS_URL, undefined, (error) => logQueueError(error))
+    : null;
 
   // The runs API works without GitHub; the webhook needs the app settings and a queue.
   let webhook: WebhookDeps | null = null;
@@ -55,7 +59,10 @@ async function main(): Promise<void> {
     queuePing: queue ? () => queue.ping() : null,
     dashboardDir: dashboardBuilt ? DASHBOARD_DIR : null,
     githubWebUrl: githubWebUrl(env.GITHUB_API_URL),
+    rateLimitPerMinute: env.RATE_LIMIT_PER_MINUTE,
+    trustProxy: env.TRUST_PROXY,
   });
+  logQueueError = (error) => app.log.warn({ error: error.message }, 'queue connection problem');
   if (!dashboardBuilt) app.log.warn('Dashboard not built: run npm run build');
   if (webhookProblem) app.log.warn(`Webhook disabled: ${webhookProblem}`);
   if (!database) app.log.warn('DATABASE_URL not set: the runs API is disabled');

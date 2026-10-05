@@ -9,6 +9,10 @@ export const DEFAULTS = {
   /** Vite dev server for the dashboard (npm run dev:dashboard); production uses PORT. */
   DASHBOARD_PORT: 3101,
   LOG_LEVEL: 'info',
+  /** Requests per minute per client on the API (health checks exempt). */
+  RATE_LIMIT_PER_MINUTE: 120,
+  /** Set when the API sits behind a proxy (nginx), so limits apply per real client. */
+  TRUST_PROXY: false,
 
   GITHUB_API_URL: 'https://api.github.com',
   /** PRs with this label count as AI-authored (spec section 7). */

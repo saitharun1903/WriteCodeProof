@@ -1,5 +1,6 @@
 import {
   bigint,
+  boolean,
   index,
   integer,
   jsonb,
@@ -59,6 +60,8 @@ export const runs = pgTable(
     riskScore: real('risk_score'),
     riskBand: text('risk_band'),
     why: text('why'),
+    /** Some checks could not run: the score is a lower bound. */
+    incomplete: boolean('incomplete').notNull().default(false),
     /** Per-check status and summary (findings live in their own table). */
     checksJson: jsonb('checks_json'),
     /** Why the run did not finish, when status is error. */

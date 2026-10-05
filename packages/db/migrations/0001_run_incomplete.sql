@@ -1,0 +1,1 @@
+ALTER TABLE "runs" ADD COLUMN "incomplete" boolean DEFAULT false NOT NULL;

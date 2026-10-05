@@ -104,7 +104,9 @@ export async function runProof(options: ProofOptions): Promise<ProofRun> {
     if (llm) progress('Asking the model for inputs and tests (in the background)');
     plan = planBehaviourDiff(ctx, { llm });
     drafted = plan.then(() =>
-      generate ? draftGeneratedTests(ctx, testOptions) : { drafts: [], notes: [] },
+      generate
+        ? draftGeneratedTests(ctx, testOptions)
+        : { drafts: [], notes: [], modelError: null, planned: 0 },
     );
     // Handled where they are awaited; this keeps an early failure from going unhandled.
     plan.catch(() => undefined);

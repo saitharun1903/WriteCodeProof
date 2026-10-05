@@ -12,6 +12,8 @@ import {
   removeWorkdir,
   RunBudget,
   SandboxError,
+  explainDockerError,
+  isDockerConnectionError,
   waitForExit,
   sandboxSettingsFromEnv,
   type StepSpec,
@@ -187,5 +189,27 @@ describe('waitForExit', () => {
   it('uses the wait result when it arrives', async () => {
     const container = { wait: async () => ({ StatusCode: 3 }), inspect: never };
     expect(await waitForExit(container as never, 30_000)).toBe(3);
+  });
+});
+
+describe('Docker connection errors', () => {
+  it('turns a lost Docker connection into one clear message', () => {
+    const lost = Object.assign(new Error('connect ENOENT //./pipe/docker_engine'), {
+      code: 'ENOENT',
+    });
+    const explained = explainDockerError(lost, 'starting a sandbox') as Error;
+    expect(explained).toBeInstanceOf(SandboxError);
+    expect(explained.message).toBe(
+      'Lost connection to Docker while starting a sandbox. Is Docker Desktop running?',
+    );
+  });
+
+  it('leaves other errors alone', () => {
+    const other = new Error('No such image');
+    expect(explainDockerError(other, 'x')).toBe(other);
+    expect(
+      isDockerConnectionError(Object.assign(new Error('refused'), { code: 'ECONNREFUSED' })),
+    ).toBe(true);
+    expect(isDockerConnectionError(new Error('conflict'))).toBe(false);
   });
 });
