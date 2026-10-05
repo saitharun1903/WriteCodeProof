@@ -10,7 +10,7 @@ export { processPullRequest } from './process.js';
 export type { ProcessDeps, ProcessOutcome } from './process.js';
 export { prKey, QUEUE_NAME, redisConnection, RunQueue } from './queue.js';
 export type { QueuedRun } from './queue.js';
-export { GitHubConfigError, githubSettingsFromEnv } from './settings.js';
+export { GitHubConfigError, githubSettingsFromEnv, githubWebUrl } from './settings.js';
 export type { GitHubSettings } from './settings.js';
 export { dbRunStore } from './store.js';
 export type { RunStore } from './store.js';

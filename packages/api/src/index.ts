@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ConfigError, loadEnvFromFile } from '@writecode-proof/core';
 import { connectDb } from '@writecode-proof/db';
 import {
@@ -5,10 +8,20 @@ import {
   GitHubApp,
   GitHubConfigError,
   githubSettingsFromEnv,
+  githubWebUrl,
   RunQueue,
   type WebhookDeps,
 } from '@writecode-proof/github';
 import { buildServer } from './server.js';
+
+/** Built by `npm run build` (packages/dashboard). */
+const DASHBOARD_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'dashboard',
+  'dist',
+);
 
 async function main(): Promise<void> {
   const env = loadEnvFromFile();
@@ -34,12 +47,16 @@ async function main(): Promise<void> {
     webhookProblem = error.message;
   }
 
+  const dashboardBuilt = existsSync(join(DASHBOARD_DIR, 'index.html'));
   const app = buildServer({
     logLevel: env.LOG_LEVEL,
     database,
     webhook,
     queuePing: queue ? () => queue.ping() : null,
+    dashboardDir: dashboardBuilt ? DASHBOARD_DIR : null,
+    githubWebUrl: githubWebUrl(env.GITHUB_API_URL),
   });
+  if (!dashboardBuilt) app.log.warn('Dashboard not built: run npm run build');
   if (webhookProblem) app.log.warn(`Webhook disabled: ${webhookProblem}`);
   if (!database) app.log.warn('DATABASE_URL not set: the runs API is disabled');
 

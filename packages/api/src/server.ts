@@ -1,3 +1,4 @@
+import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { readPackageVersion, type LogLevel } from '@writecode-proof/core';
@@ -15,7 +16,16 @@ export interface ServerOptions {
   webhook?: WebhookDeps | null;
   /** Checked by /health; the queue's Redis connection. */
   queuePing?: (() => Promise<void>) | null;
+  /** Built dashboard (packages/dashboard/dist), served at /. */
+  dashboardDir?: string | null;
+  /** Base for pull request links on the dashboard, e.g. https://github.com. */
+  githubWebUrl?: string | null;
 }
+
+/** Paths that belong to the API; everything else may be a dashboard page. */
+const API_PATHS = /^\/(api|webhook|health)(\/|$|\?)/;
+/** Paths ending in a file extension are files, not pages. */
+const FILE_PATH = /\/[^/]+\.[a-z0-9]+$/i;
 
 const listQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -69,6 +79,8 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     });
   });
 
+  app.get('/api/meta', async () => ({ version, githubWebUrl: options.githubWebUrl ?? null }));
+
   app.get('/api/runs', async (req, reply) => {
     if (!database) return reply.code(503).send({ error: 'No database configured' });
     const parsed = listQuery.safeParse(req.query);
@@ -83,6 +95,20 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     const run = await getRun(database.db, parsed.data.id);
     return run ?? reply.code(404).send({ error: 'Run not found' });
   });
+
+  if (options.dashboardDir) {
+    // Files are looked up per request, so a rebuild while running is picked up.
+    app.register(fastifyStatic, { root: options.dashboardDir });
+    // Pages like /runs/<id> are routed in the browser: serve the app for them.
+    // A missing file (/assets/x.js) stays a 404, never the page in its place.
+    app.setNotFoundHandler((req, reply) => {
+      const path = req.url.split('?')[0] ?? '';
+      if (req.method === 'GET' && !API_PATHS.test(path) && !FILE_PATH.test(path)) {
+        return reply.sendFile('index.html');
+      }
+      return reply.code(404).send({ error: 'Not found' });
+    });
+  }
 
   return app;
 }

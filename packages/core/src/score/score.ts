@@ -1,3 +1,4 @@
+import { formatScore } from '../labels.js';
 import { detectLanguage } from '../parse/languages.js';
 import type { ChangeSet, CheckName, CheckResult, Finding } from '../types.js';
 import { MAX_SCORE, WEIGHTS, type BlockReason, type Policy } from './weights.js';
@@ -31,25 +32,8 @@ export interface RiskInput {
   aiAuthored: boolean;
 }
 
-export const BAND_LABEL: Record<RiskBand, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  blocked: 'Blocked',
-};
-
-export const BAND_ACTION: Record<RiskBand, string> = {
-  low: 'auto-approve allowed',
-  medium: 'one reviewer required',
-  high: 'code owner review required',
-  blocked: 'merge blocked',
-};
-
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-/** "6", "4.5" */
-export const formatScore = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 function findings(checks: CheckResult[], check: CheckName): Finding[] {
   return checks.find((c) => c.check === check)?.findings ?? [];

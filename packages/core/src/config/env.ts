@@ -53,6 +53,10 @@ export const envSchema = z
       blankToUndefined,
       z.coerce.number().int().min(1).max(65535).default(DEFAULTS.PORT),
     ),
+    DASHBOARD_PORT: z.preprocess(
+      blankToUndefined,
+      z.coerce.number().int().min(1).max(65535).default(DEFAULTS.DASHBOARD_PORT),
+    ),
     LOG_LEVEL: z.preprocess(blankToUndefined, z.enum(LOG_LEVELS).default(DEFAULTS.LOG_LEVEL)),
 
     // LLM

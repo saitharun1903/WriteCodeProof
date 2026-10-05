@@ -16,10 +16,13 @@ export interface DbHandle {
   close(): Promise<void>;
 }
 
+/** Without this, pg waits forever for an unreachable server. */
+const CONNECT_TIMEOUT_MS = 5_000;
+
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
 
 export function connectDb(url: string): DbHandle {
-  const pool = new pg.Pool({ connectionString: url });
+  const pool = new pg.Pool({ connectionString: url, connectionTimeoutMillis: CONNECT_TIMEOUT_MS });
   // An idle client losing its connection must not crash the process.
   pool.on('error', () => undefined);
   const db = drizzle(pool, { schema });

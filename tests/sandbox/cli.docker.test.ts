@@ -8,8 +8,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, expect, it } from 'vitest';
-import { COMMENT_MARKER } from '@writecode-proof/core';
+import pg from 'pg';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { COMMENT_MARKER, loadEnvFromFile } from '@writecode-proof/core';
+import { connectDb, getRun } from '@writecode-proof/db';
 import { createExampleRepo } from '../../scripts/example-repo.mjs';
 
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -27,13 +29,21 @@ interface Result {
 }
 
 function run(...args: string[]): Promise<Result> {
+  return runWith({}, ...args);
+}
+
+/**
+ * DATABASE_URL is blank unless a test sets it: set variables win over .env,
+ * so test runs never land in the developer's database.
+ */
+function runWith(env: Record<string, string>, ...args: string[]): Promise<Result> {
   return new Promise((resolve) => {
     execFile(
       process.execPath,
       [cli, ...args],
       {
         cwd: projectRoot,
-        env: { ...process.env, NO_COLOR: '1' },
+        env: { ...process.env, NO_COLOR: '1', DATABASE_URL: '', ...env },
         maxBuffer: 16 * 1024 * 1024,
         // Fail with whatever was printed instead of hanging the suite.
         timeout: CLI_TIMEOUT_MS,
@@ -126,6 +136,86 @@ ${result.stdout.slice(0, 500)}`,
     const result = await run('check', plain, '--no-llm');
     expect(result.code).toBe(3);
     expect(result.stderr).toMatch(/not inside a git repository/);
+  });
+});
+
+describe('saving runs for the dashboard', () => {
+  const env = loadEnvFromFile(projectRoot);
+  const testDb = `wcp_cli_${randomBytes(4).toString('hex')}`;
+  let url: string;
+
+  beforeAll(async () => {
+    if (!env.DATABASE_URL) throw new Error('Set DATABASE_URL (npm run infra:up)');
+    const admin = new pg.Client({ connectionString: env.DATABASE_URL });
+    await admin.connect();
+    await admin.query(`CREATE DATABASE ${testDb}`);
+    await admin.end();
+    const u = new URL(env.DATABASE_URL);
+    u.pathname = `/${testDb}`;
+    url = u.toString();
+  });
+
+  afterAll(async () => {
+    const admin = new pg.Client({ connectionString: env.DATABASE_URL });
+    await admin.connect();
+    await admin.query(`DROP DATABASE IF EXISTS ${testDb} WITH (FORCE)`);
+    await admin.end();
+  });
+
+  it('stores a CLI run with its findings when DATABASE_URL is set', async () => {
+    const repo = createExampleRepo('py-sample', join(root, 'py-store'));
+    const result = await runWith({ DATABASE_URL: url }, 'check', repo, '--no-llm', '--json');
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stderr).toContain('Saved to the dashboard database');
+    const { runId } = JSON.parse(result.stdout) as { runId: string };
+
+    const database = connectDb(url);
+    try {
+      const stored = await getRun(database.db, runId);
+      expect(stored).toMatchObject({
+        source: 'cli',
+        repo: 'py-store',
+        status: 'done',
+        riskScore: 6,
+        riskBand: 'medium',
+        headSha: null,
+      });
+      expect(stored!.findings.map((f) => f.title)).toContain(
+        'cheapest_item([]) throws ValueError (was None)',
+      );
+    } finally {
+      await database.close();
+    }
+  });
+
+  it('skips saving with --no-store', async () => {
+    const repo = createExampleRepo('py-sample', join(root, 'py-nostore'));
+    const result = await runWith(
+      { DATABASE_URL: url },
+      'check',
+      repo,
+      '--no-llm',
+      '--json',
+      '--no-store',
+    );
+    expect(result.code).toBe(0);
+    expect(result.stderr).not.toContain('Saved to the dashboard database');
+  });
+
+  it('still reports when the database is unreachable', async () => {
+    const repo = createExampleRepo('py-sample', join(root, 'py-nodb'));
+    const nowhere = 'postgresql://proof:x@127.0.0.1:1/proof';
+    const result = await runWith(
+      { DATABASE_URL: nowhere },
+      'check',
+      repo,
+      '--no-llm',
+      '--json',
+      '--quiet',
+    );
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout).risk.band).toBe('medium');
+    expect(result.stderr).toMatch(/warning: run not saved to the database/);
   });
 });
 

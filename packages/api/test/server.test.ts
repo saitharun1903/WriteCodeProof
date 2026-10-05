@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { sign } from '@octokit/webhooks-methods';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { WebhookDeps } from '@writecode-proof/github';
@@ -92,5 +95,57 @@ describe('runs API input checks', () => {
 
   it('answers 404 for an id that is not a run id', async () => {
     expect((await app.inject({ method: 'GET', url: '/api/runs/not-a-uuid' })).statusCode).toBe(404);
+  });
+});
+
+describe('serving the dashboard', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'wcp-dash-'));
+  mkdirSync(join(dir, 'assets'));
+  writeFileSync(join(dir, 'index.html'), '<!doctype html><div id="root"></div>');
+  writeFileSync(join(dir, 'assets', 'app-1.js'), 'console.log(1)');
+  const app = buildServer({
+    logLevel: 'silent',
+    dashboardDir: dir,
+    githubWebUrl: 'https://github.com',
+  });
+  afterAll(async () => {
+    await app.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('serves the app and its files', async () => {
+    const page = await app.inject({ method: 'GET', url: '/' });
+    expect(page.headers['content-type']).toMatch(/text\/html/);
+    const js = await app.inject({ method: 'GET', url: '/assets/app-1.js' });
+    expect(js.headers['content-type']).toMatch(/javascript/);
+  });
+
+  it('serves the app for page paths so deep links work', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/runs/0b80aa3e-1111-2222-3333-444455556666?x=1',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('id="root"');
+  });
+
+  it('picks up files built after start-up', async () => {
+    writeFileSync(join(dir, 'assets', 'app-2.js'), 'console.log(2)');
+    const res = await app.inject({ method: 'GET', url: '/assets/app-2.js' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/javascript/);
+  });
+
+  it('answers 404, never the page, for missing files and API paths', async () => {
+    for (const url of ['/assets/gone.js', '/api/nope', '/webhook/x']) {
+      const res = await app.inject({ method: 'GET', url });
+      expect(res.statusCode, url).toBe(404);
+      expect(res.body).not.toContain('id="root"');
+    }
+  });
+
+  it('tells the dashboard where pull requests live', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/meta' });
+    expect(res.json()).toMatchObject({ githubWebUrl: 'https://github.com' });
   });
 });

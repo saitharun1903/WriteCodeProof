@@ -24,6 +24,7 @@ export function buildProgram(): Command {
       new Option('--provider <name>', 'LLM provider for this run').choices([...LLM_PROVIDERS]),
     )
     .option('--ai-authored', 'the change was written by an AI (adds to the risk score)')
+    .option('--no-store', 'do not save the run to DATABASE_URL')
     .option('-q, --quiet', 'no progress output')
     .action(async (path: string, options: CheckOptions) => {
       process.exitCode = await checkCommand(path, options);

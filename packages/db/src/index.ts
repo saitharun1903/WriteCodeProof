@@ -15,6 +15,7 @@ export type {
   FinishedRun,
   ListOptions,
   NewRun,
+  RunDetail,
   RunListItem,
   RunSource,
   RunStatus,

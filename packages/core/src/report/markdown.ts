@@ -1,14 +1,14 @@
-import { BAND_ACTION, BAND_LABEL, formatScore } from '../score/score.js';
-import type { CheckResult, Finding } from '../types.js';
 import {
+  BAND_ACTION,
+  BAND_LABEL,
   CHECK_LABEL,
-  changeSummary,
   formatDuration,
-  orderedChecks,
+  formatScore,
   shortId,
   STATUS_ICON,
-  type Report,
-} from './common.js';
+} from '../labels.js';
+import type { CheckResult, Finding } from '../types.js';
+import { changeSummary, orderedChecks, type Report } from './common.js';
 
 /** Hidden marker used to find and update our own PR comment (spec section 8). */
 export const COMMENT_MARKER = '<!-- writecode-proof -->';

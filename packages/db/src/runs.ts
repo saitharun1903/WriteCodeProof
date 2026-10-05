@@ -225,3 +225,5 @@ export async function getRun(db: Db, id: string) {
     .orderBy(findings.id);
   return { ...toItem(rest), checks: (checksJson ?? []) as StoredCheck[], error, findings: list };
 }
+
+export type RunDetail = NonNullable<Awaited<ReturnType<typeof getRun>>>;

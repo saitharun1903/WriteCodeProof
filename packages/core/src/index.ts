@@ -94,26 +94,22 @@ export {
 } from './config/repoConfig.js';
 export type { LoadedRepoConfig, RepoConfig } from './config/repoConfig.js';
 export type { ExistingTestsOptions } from './checks/existingTests.js';
-export {
-  BAND_ACTION,
-  BAND_LABEL,
-  bandFor,
-  formatScore,
-  riskInputFromRun,
-  scoreRisk,
-} from './score/score.js';
+export { bandFor, riskInputFromRun, scoreRisk } from './score/score.js';
 export type { Contribution, Risk, RiskBand, RiskInput } from './score/score.js';
 export { DEFAULT_POLICY, MAX_SCORE, WEIGHTS } from './score/weights.js';
 export type { BlockReason, Policy } from './score/weights.js';
+export { changeSummary, orderedChecks } from './report/common.js';
 export {
+  BAND_ACTION,
+  BAND_LABEL,
   CHECK_LABEL,
   CHECK_ORDER,
-  changeSummary,
   formatDuration,
-  orderedChecks,
+  formatScore,
+  SEVERITY_ORDER,
   shortId,
   STATUS_ICON,
-} from './report/common.js';
+} from './labels.js';
 export type { Report } from './report/common.js';
 export {
   COMMENT_MARKER,

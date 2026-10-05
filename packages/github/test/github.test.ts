@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { COMMENT_MARKER } from '@writecode-proof/core';
 import {
   checkConclusion,
+  githubWebUrl,
   handleWebhook,
   isAiAuthored,
   pullRequestGitHub,
@@ -312,5 +313,12 @@ describe('handleWebhook', () => {
     );
     expect(res.status).toBe(202);
     expect(enqueued[0]).toMatchObject({ checkRunId: null });
+  });
+});
+
+describe('githubWebUrl', () => {
+  it('maps API addresses to web addresses', () => {
+    expect(githubWebUrl('https://api.github.com')).toBe('https://github.com');
+    expect(githubWebUrl('https://ghe.example.com/api/v3')).toBe('https://ghe.example.com');
   });
 });

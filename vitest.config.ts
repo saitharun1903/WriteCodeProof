@@ -1,21 +1,27 @@
+import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
-const src = (pkg: string) =>
-  fileURLToPath(new URL(`./packages/${pkg}/src/index.ts`, import.meta.url));
+const path = (p: string) => fileURLToPath(new URL(`./packages/${p}`, import.meta.url));
+const pkg = (name: string) => ({
+  find: new RegExp(`^@writecode-proof/${name}$`),
+  replacement: path(`${name}/src/index.ts`),
+});
 
 export default defineConfig({
+  plugins: [react()],
   resolve: {
     // Run tests against source, so `npm test` works without a build first.
-    alias: {
-      '@writecode-proof/core': src('core'),
-      '@writecode-proof/db': src('db'),
-      '@writecode-proof/github': src('github'),
-      '@writecode-proof/worker': src('worker'),
-    },
+    alias: [
+      { find: /^@writecode-proof\/core\/labels$/, replacement: path('core/src/labels.ts') },
+      pkg('core'),
+      pkg('db'),
+      pkg('github'),
+      pkg('worker'),
+    ],
   },
   test: {
-    include: ['packages/*/test/**/*.test.ts', 'tests/**/*.test.ts'],
+    include: ['packages/*/test/**/*.test.{ts,tsx}', 'tests/**/*.test.ts'],
     // Needs Docker; run separately with npm run test:sandbox.
     exclude: ['**/node_modules/**', 'tests/sandbox/**'],
     environment: 'node',

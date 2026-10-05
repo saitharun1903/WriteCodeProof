@@ -51,3 +51,13 @@ export async function githubSettingsFromEnv(
     cloneRoot: resolve(env.CLONE_ROOT ?? join(tmpdir(), CLONE_FOLDER)),
   };
 }
+
+/**
+ * Web address for links, from the API address: api.github.com → github.com,
+ * https://ghe.example.com/api/v3 → https://ghe.example.com.
+ */
+export function githubWebUrl(apiUrl: string): string {
+  const url = new URL(apiUrl);
+  if (url.hostname === 'api.github.com') return 'https://github.com';
+  return url.origin;
+}

@@ -1,7 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { exitCodeFor, EXIT } from '../src/exitCodes.js';
 import { buildProgram } from '../src/program.js';
 import { oneLine } from '../src/render.js';
+import { repoLabel } from '../src/store.js';
 
 vi.mock('../src/commands/check.js', () => ({ checkCommand: vi.fn(async () => 0) }));
 vi.mock('../src/commands/doctor.js', () => ({ doctorCommand: vi.fn(async () => 0) }));
@@ -80,5 +85,26 @@ describe('oneLine', () => {
       'Expected: + -1 - -2',
     );
     expect(oneLine('x'.repeat(500))).toHaveLength(140);
+  });
+});
+
+describe('repoLabel', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'wcp-label-'));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: dir });
+
+  it('uses the folder name without a remote', async () => {
+    git('init', '-q');
+    expect(await repoLabel(dir)).toBe(basename(dir));
+  });
+
+  it.each([
+    ['https://github.com/acme/shop.git', 'acme/shop'],
+    ['git@github.com:acme/shop.git', 'acme/shop'],
+    ['https://gitlab.example.com/team/api', 'team/api'],
+  ])('reads owner/repo from %s', async (url, label) => {
+    // Creates or replaces the origin remote's URL.
+    git('config', 'remote.origin.url', url);
+    expect(await repoLabel(dir)).toBe(label);
   });
 });

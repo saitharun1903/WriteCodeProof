@@ -14,8 +14,8 @@ The full spec is in [WRITECODE_PROOF_SPEC.md](WRITECODE_PROOF_SPEC.md).
 | 4     | Checks (tests, security, behaviour, gen) | Done                              |
 | 5     | Risk score + CLI                         | Done                              |
 | 6     | GitHub App                               | Done (needs your app to try live) |
-| 7     | Dashboard                                | Next                              |
-| 8     | Hardening                                | Pending                           |
+| 7     | Dashboard                                | Done                              |
+| 8     | Hardening                                | Next                              |
 
 ## Requirements
 
@@ -42,21 +42,22 @@ This starts Postgres on `127.0.0.1:5433` and Redis on `127.0.0.1:6380`, then wai
 
 ## Commands
 
-| Command                | Does                                             |
-| ---------------------- | ------------------------------------------------ |
-| `npm test`             | Run all tests (no build needed)                  |
-| `npm run build`        | Compile every package to `dist/`                 |
-| `npm run lint`         | ESLint                                           |
-| `npm run format`       | Prettier                                         |
-| `npm run infra:up`     | Start Postgres + Redis                           |
-| `npm run infra:down`   | Stop them (data stays in the volumes)            |
-| `npm run infra:logs`   | Follow their logs                                |
-| `npm run examples`     | Build the sample repos in `.examples/`           |
-| `npm run build:images` | Build the three sandbox images                   |
-| `npm run test:sandbox` | Docker tests proving the sandbox limits          |
-| `npm run cache:clear`  | Remove cached dependency volumes and LLM replies |
-| `npm run dev`          | API + worker + smee.io relay, for the GitHub App |
-| `npm run db:generate`  | New SQL migration after a schema change          |
+| Command                 | Does                                             |
+| ----------------------- | ------------------------------------------------ |
+| `npm test`              | Run all tests (no build needed)                  |
+| `npm run build`         | Compile every package to `dist/`                 |
+| `npm run lint`          | ESLint                                           |
+| `npm run format`        | Prettier                                         |
+| `npm run infra:up`      | Start Postgres + Redis                           |
+| `npm run infra:down`    | Stop them (data stays in the volumes)            |
+| `npm run infra:logs`    | Follow their logs                                |
+| `npm run examples`      | Build the sample repos in `.examples/`           |
+| `npm run build:images`  | Build the three sandbox images                   |
+| `npm run test:sandbox`  | Docker tests proving the sandbox limits          |
+| `npm run cache:clear`   | Remove cached dependency volumes and LLM replies |
+| `npm run dev`           | API + worker + smee.io relay, for the GitHub App |
+| `npm run dev:dashboard` | Dashboard with live reload on `DASHBOARD_PORT`   |
+| `npm run db:generate`   | New SQL migration after a schema change          |
 
 ## Layout
 
@@ -68,12 +69,13 @@ packages/
   db/     Postgres schema, migrations and queries (Drizzle)
   github/ webhooks, the run queue, PR comments, check runs, cloning
   worker/ queue consumer that runs the engine on pull requests
+  dashboard/ runs list and run detail page (Vite + React)
 examples/ sample projects, each as base/ and pr/ snapshots
 scripts/  dev helpers (example-repo.mjs turns a sample into a git repo)
 tests/    checks that span the whole repo
 ```
 
-`packages/dashboard` gets added in Phase 7.
+`packages/dashboard` is the web page (Vite + React), served by the API.
 
 ## Configuration
 
@@ -236,6 +238,14 @@ npm run dev
 
 Then open a pull request on the test repository. Without the app settings the API still starts; the webhook answers 503 and the log says which setting is missing.
 
+### Dashboard
+
+Open http://127.0.0.1:3100 once the API is running (`npm run dev`, or `node packages/api/dist/index.js`). It lists every run, newest first, from pull requests and from local checks, with the risk, status and the reason for the score. Each run has a page with its checks and findings, most serious first. Runs that are queued or running update by themselves.
+
+Local checks show up there when `DATABASE_URL` is set; `writecode-proof check --no-store` skips saving. If the database is down the check still runs and only warns.
+
+`npm run build` builds the dashboard and the API serves it on `PORT`. While working on the dashboard itself, `npm run dev:dashboard` serves it with live reload on `DASHBOARD_PORT` and forwards `/api` to the API.
+
 ### API
 
 | Method | Path                                         | Returns                                                     |
@@ -243,6 +253,7 @@ Then open a pull request on the test repository. Without the app settings the AP
 | POST   | `/webhook`                                   | GitHub deliveries (signature checked against the raw body)  |
 | GET    | `/api/runs?page=1&pageSize=20&source=github` | Runs, newest first                                          |
 | GET    | `/api/runs/:id`                              | One run with its checks and findings                        |
+| GET    | `/api/meta`                                  | Version and the GitHub web address for links                |
 | GET    | `/health`                                    | Liveness, plus whether the database and queue are reachable |
 
 The database stores runs, findings and short snippets; never source code. Tables are created on start-up from the SQL in `packages/db/migrations`.
@@ -385,3 +396,25 @@ npm run test:sandbox
 [github.docker.test.ts](tests/sandbox/github.docker.test.ts) runs the whole GitHub flow against real Postgres and Redis, the real queue and worker, and a real git remote serving `refs/pull/1/head` the way GitHub does; only the GitHub API is a recorder. It checks: a pending check, then one comment with the score and a successful check; the run and its findings in Postgres and on `/api/runs`; a second push updating the same comment; a push that replaces a waiting run; and a failing clone producing an error comment, a neutral check and an error run. It uses its own database and Redis prefix and removes them afterwards.
 
 The live test needs your GitHub App (see Setting it up): open a pull request on the test repo, check the comment and the "WriteCode Proof" check appear, push again and check the same comment changes.
+
+## Verifying Phase 7
+
+```bash
+npm run build
+```
+
+```bash
+npm run examples
+```
+
+```bash
+npx writecode-proof check .examples/js-sample
+```
+
+```bash
+node packages/api/dist/index.js
+```
+
+Open http://127.0.0.1:3100: the local check is listed; click it to see its checks and findings. Pull request runs appear the same way once the GitHub App is set up.
+
+Automated: [dashboard.test.tsx](packages/dashboard/test/dashboard.test.tsx) renders both pages against a fake API (runs from both sources, filters, empty and error states, findings order, deep links). [cli.docker.test.ts](tests/sandbox/cli.docker.test.ts) checks that a CLI run is stored with its findings, and [github.docker.test.ts](tests/sandbox/github.docker.test.ts) that a pull request run is, both read back through `/api/runs`.

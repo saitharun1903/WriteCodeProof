@@ -19,6 +19,7 @@ import {
   type Env,
 } from '@writecode-proof/core';
 import { exitCodeFor } from '../exitCodes.js';
+import { saveRun } from '../store.js';
 import { renderTerminal } from '../render.js';
 
 export interface CheckOptions {
@@ -31,6 +32,8 @@ export interface CheckOptions {
   provider?: Env['LLM_PROVIDER'];
   aiAuthored?: boolean;
   quiet?: boolean;
+  /** Save the run to DATABASE_URL for the dashboard (on unless --no-store). */
+  store: boolean;
 }
 
 /** `writecode-proof check [path]`: returns the process exit code. */
@@ -82,6 +85,17 @@ export async function checkCommand(
 
   const risk = scoreRisk(riskInputFromRun(run, options.aiAuthored ?? false), loaded.config.policy);
   const report = { run, risk };
+
+  if (options.store && env.DATABASE_URL) {
+    await saveRun(env.DATABASE_URL, root, run, risk).then(
+      () => progress('Saved to the dashboard database'),
+      // The check itself succeeded; a missing database must not change its result.
+      (error: unknown) =>
+        process.stderr.write(
+          pc.yellow(`warning: run not saved to the database (${(error as Error).message})\n`),
+        ),
+    );
+  }
 
   if (options.out) {
     const file = resolve(options.out);
