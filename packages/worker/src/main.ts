@@ -6,9 +6,10 @@ import {
   defaultCacheDir,
   loadEnvFromFile,
   Sandbox,
+  SandboxError,
   sandboxSettingsFromEnv,
 } from '@writecode-proof/core';
-import { connectDb } from '@writecode-proof/db';
+import { connectDb, DbUnavailableError } from '@writecode-proof/db';
 import {
   dbRunStore,
   GitHubApp,
@@ -81,7 +82,11 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  const known = error instanceof ConfigError || error instanceof GitHubConfigError;
+  const known =
+    error instanceof ConfigError ||
+    error instanceof GitHubConfigError ||
+    error instanceof DbUnavailableError ||
+    error instanceof SandboxError;
   console.error(known ? (error as Error).message : error);
   process.exit(1);
 });

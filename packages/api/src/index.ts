@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ConfigError, loadEnvFromFile } from '@writecode-proof/core';
-import { connectDb } from '@writecode-proof/db';
+import { connectDb, DbUnavailableError } from '@writecode-proof/db';
 import {
   dbRunStore,
   GitHubApp,
@@ -81,6 +81,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error(error instanceof ConfigError ? error.message : error);
+  const known = error instanceof ConfigError || error instanceof DbUnavailableError;
+  console.error(known ? (error as Error).message : error);
   process.exit(1);
 });

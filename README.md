@@ -541,6 +541,7 @@ The first takes under a minute and needs nothing running. The second needs Docke
 | `Ollama has no model "…"`                              | `ollama pull` the model named, or change `LLM_MODEL`.                                                                         |
 | `… is not inside a git repository`                     | Point `check` at a folder inside a git repo. For the samples, run `npm run examples` and use `.examples/<name>`.              |
 | `Cannot find "main"`                                   | The repo's main branch has another name: pass `--base master` (or whatever it is).                                            |
+| `Cannot reach Postgres at localhost:5433`              | Postgres is stopped: run `npm run infra:up`, then start again.                                                                |
 | `set POSTGRES_PASSWORD in .env` when starting infra    | Copy `.env.example` to `.env` and set the password (step 2).                                                                  |
 | Port 5433, 6380 or 3100 already in use                 | Change `POSTGRES_PORT`, `REDIS_PORT` or `PORT` in `.env` (and `DATABASE_URL`/`REDIS_URL` to match).                           |
 | First run is slow                                      | The model writes about 7 tokens a second on a small GPU. Later runs reuse its answers; `--no-generate` or `--no-llm` skip it. |

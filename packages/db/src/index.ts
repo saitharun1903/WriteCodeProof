@@ -1,4 +1,4 @@
-export { connectDb } from './client.js';
+export { connectDb, DbUnavailableError, describeDbUrl } from './client.js';
 export type { Db, DbHandle } from './client.js';
 export {
   createRun,
